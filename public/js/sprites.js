@@ -242,9 +242,10 @@ function rect(g, color, x, y, w, h) {
 //  b: bob do corpo (+ = desce)   hx/hy: deslocamento só da cabeça   sit: sentado (com cadeira)
 //  walkF: fase do ciclo de perna (0..3)   lift: [perna esq., perna dir.] elevação em px
 //  armL/armR: { m: modo, o: deslocamento, dx }   eyes / mouth: expressão   sweat: gota de suor
+//  lx: inclinação lateral do tronco (tronco+braços+cabeça; pernas ficam). De perfil o sinal inverte (-lx = para trás)
 function makeParams(over) {
   return Object.assign({
-    b: 0, hx: 0, hy: 0, sit: false, walkF: 0, lift: [0, 0],
+    b: 0, hx: 0, hy: 0, lx: 0, sit: false, walkF: 0, lift: [0, 0],
     armL: { m: 'down', o: 0 }, armR: { m: 'down', o: 0 },
     eyes: 'open', mouth: 'flat', sweat: false,
   }, over);
@@ -543,25 +544,50 @@ function armPre(g, L, D, side, A, y0) {
     rect(g, L.shirtShade, x0, y0 + 1, 2, 3);
     rect(g, L.skin, xo, y0 - 1 + o, 2, 3);
     rect(g, L.shirtShade, x0, y0, 2, 1);
+  } else if (A.m === 'talk') {
+    // gesto de fala (amplo): o=0 mão alta ao lado da cabeça, 1 antebraço a meia-altura, 2 mão aberta e baixa
+    const s = side < 0 ? -1 : 1;
+    const xo = x0 + s * (D.tw < 8 ? 2 : 1);
+    if (o === 0) {
+      rect(g, L.shirtShade, x0, y0, 2, 2);
+      rect(g, L.shirtShade, xo, y0 - 3, 2, 4);
+      rect(g, L.skin, xo, y0 - 5, 2, 2);
+    } else if (o === 1) {
+      rect(g, L.shirtShade, x0, y0, 2, 2);
+      rect(g, L.shirtShade, xo, y0 - 1, 2, 3);
+      rect(g, L.skin, xo, y0 - 3, 2, 2);
+    } else {
+      rect(g, L.shirtShade, x0, y0, 2, 3);
+      rect(g, L.shirtShade, xo, y0 + 1, 2, 1);
+      rect(g, L.skin, xo, y0 + 2, 2, 2);
+    }
   }
 }
 
 function isPost(m) { return m === 'fwd' || m === 'chin' || m === 'mug'; }
+// De frente, o gesto de fala é desenhado por cima da cabeça (a mão sobre o cabelo); de costas fica atrás.
+function isPostFB(m, back) { return isPost(m) || (m === 'talk' && !back); }
 
-function mugFront(g, x, y) {
-  rect(g, '#f1f5f9', x, y, 3, 3);
-  rect(g, '#cbd5e1', x + 2, y + 1, 1, 2);
-  rect(g, '#6b3f24', x, y, 3, 1);
+// Caneca: (ix,iy) = canto do interior 3x3; contorno escuro de 1px garante leitura sobre qualquer camisa.
+// tilt = caneca inclinada no gole (o café escorre para o lado da borda).
+function mugFront(g, ix, iy, tilt, steam) {
+  rect(g, EYE, ix - 1, iy - 1, 5, 5);
+  rect(g, '#f1f5f9', ix, iy, 3, 3);
+  rect(g, '#cbd5e1', ix + 2, iy + 1, 1, 2);
+  rect(g, '#cbd5e1', ix + 3, iy, 1, 2);               // alça
+  if (tilt) rect(g, '#6b3f24', ix, iy, 1, 3); else rect(g, '#6b3f24', ix, iy, 3, 1);
+  if (steam) { rect(g, '#dbe4f0', ix + 1, iy - 2, 1, 1); rect(g, '#dbe4f0', ix + 2, iy - 3, 1, 1); }
 }
 
 // Braços que ficam NA FRENTE do torso (digitar, mão no queixo, caneca)
 function armPost(g, L, D, side, A, y0, back) {
   const x0 = side < 0 ? D.axL : D.axR;
   const o = A.o || 0;
+  if (A.m === 'talk') { armPre(g, L, D, side, A, y0); return; }
   if (back) {
     // de costas: só os cotovelos aparecem
     if (A.m === 'fwd') { rect(g, L.shirtShade, x0, y0 + 1 + o, 2, 4); rect(g, L.skin, x0, y0 + 5 + o, 2, 1); }
-    else { rect(g, L.shirtShade, x0, y0 - 1, 2, 5); rect(g, L.skin, x0 + (side < 0 ? 1 : -1), y0 - 2, 2, 2); }
+    else { const up = A.m === 'mug' ? o : 0; rect(g, L.shirtShade, x0, y0 - 1 - up, 2, 5 + up); rect(g, L.skin, x0 + (side < 0 ? 1 : -1), y0 - 2 - up, 2, 2); }
     return;
   }
   if (A.m === 'fwd') {
@@ -572,11 +598,13 @@ function armPost(g, L, D, side, A, y0, back) {
     rect(g, L.shirtShade, x0, y0 + 2, 2, 3);
     if (side < 0) rect(g, L.skin, 3, y0, 4, 2); else rect(g, L.skin, 9, y0, 4, 2);
   } else if (A.m === 'mug') {
-    const fy = y0 + (o ? -2 : 0);
+    // o=0 caneca no peito (com vapor) | 1 na boca | 2 no gole (mais alta, inclinada)
+    const iy = [y0 + 1, y0 - 2, y0 - 3][o];
+    const hy = iy + 1;
     rect(g, L.shirtShade, x0, y0 + 1, 2, 3);
-    rect(g, L.skin, 11, fy, 2, 3);
-    mugFront(g, 8, fy);
-    if (!o) rect(g, '#dbe4f0', 9, fy - 2, 1, 1);
+    rect(g, L.shirtShade, x0, hy + 2, 2, Math.max(0, y0 + 4 - (hy + 2)));
+    rect(g, L.skin, x0, hy, 2, 2);
+    mugFront(g, x0 - 4, iy, o === 2, o === 0);
   }
 }
 
@@ -619,9 +647,13 @@ function paintFB(g, L, back, P) {
   if (!sit) legsStandFB(g, L, D, P);
   else if (!back) legsSitFront(g, L, D);
 
+  // tronco inteiro (braços, torso, cabeça) pode se inclinar de lado; as pernas ficam plantadas
+  g.save();
+  g.translate(P.lx || 0, 0);
+
   // braços laterais (atrás do torso)
-  if (!isPost(P.armL.m)) armPre(g, L, D, -1, P.armL, y0);
-  if (!isPost(P.armR.m)) armPre(g, L, D, 1, P.armR, y0);
+  if (!isPostFB(P.armL.m, back)) armPre(g, L, D, -1, P.armL, y0);
+  if (!isPostFB(P.armR.m, back)) armPre(g, L, D, 1, P.armR, y0);
 
   // torso
   rect(g, L.shirt, txL, y0, D.tw, tH);
@@ -635,21 +667,23 @@ function paintFB(g, L, back, P) {
 
   // braços à frente do torso (digitar, queixo, caneca)
   if (back) {
-    if (isPost(P.armL.m)) armPost(g, L, D, -1, P.armL, y0, true);
-    if (isPost(P.armR.m)) armPost(g, L, D, 1, P.armR, y0, true);
+    if (isPostFB(P.armL.m, true)) armPost(g, L, D, -1, P.armL, y0, true);
+    if (isPostFB(P.armR.m, true)) armPost(g, L, D, 1, P.armR, y0, true);
     if (sit) { chairBox(g, txL - 1, y0 + 2, D.tw + 2, 4); rect(g, CHAIR_DK, txL - 1, 20, D.tw + 2, 2); }
   }
 
-  // cabeça
+  // cabeça (com hy<0 a cabeça sobe e o pescoço aparece)
+  if (P.hy < 0) rect(g, L.skinShade, 6, 12 + by + P.hy, 4, -P.hy);
   g.save();
   g.translate(P.hx || 0, 0);
   paintHeadFB(g, L, back, by + (P.hy || 0), P);
   g.restore();
 
   if (!back) {
-    if (isPost(P.armL.m)) armPost(g, L, D, -1, P.armL, y0, false);
-    if (isPost(P.armR.m)) armPost(g, L, D, 1, P.armR, y0, false);
+    if (isPostFB(P.armL.m, false)) armPost(g, L, D, -1, P.armL, y0, false);
+    if (isPostFB(P.armR.m, false)) armPost(g, L, D, 1, P.armR, y0, false);
   }
+  g.restore();
 }
 
 // ---------------------------------------------------------------------------
@@ -668,6 +702,21 @@ function armSide(g, L, D, A, y0) {
   } else if (A.m === 'gest') {
     rect(g, L.shirtShade, ax, y0 + 1, 3, 3);
     rect(g, L.skin, ax - 3, y0 + o, 4, 2);
+  } else if (A.m === 'talk') {
+    // gesto de fala de perfil (por cima da cabeça): o=0 mão alta diante do rosto, 1 antebraço a meia-altura, 2 mão aberta e baixa
+    const hx = Math.max(0, ax - 6);
+    if (o === 0) {
+      rect(g, L.shirtShade, ax, y0, 3, 3);
+      rect(g, L.shirtShade, hx + 2, y0, ax - hx - 2, 2);
+      rect(g, L.skin, hx, y0 - 3, 3, 4);
+    } else if (o === 1) {
+      rect(g, L.shirtShade, ax, y0, 3, 3);
+      rect(g, L.shirtShade, hx + 2, y0 + 1, ax - hx - 2, 2);
+      rect(g, L.skin, hx, y0, 3, 3);
+    } else {
+      rect(g, L.shirtShade, ax, y0 + 1, 3, 3);
+      rect(g, L.skin, ax - 3, y0 + 3, 3, 2);
+    }
   } else if (A.m === 'fwd') {
     rect(g, L.shirtShade, ax, y0 + 1, 3, 3);
     rect(g, L.skin, 3, y0 + 3 + o, 5, 2);
@@ -676,13 +725,19 @@ function armSide(g, L, D, A, y0) {
     rect(g, L.skin, 4, y0 - 2, 3, 4);
     rect(g, L.skin, 5, y0 + 1, 3, 2);
   } else if (A.m === 'mug') {
-    const fy = y0 + (o ? -2 : 1);
+    // o=0 caneca no peito | 1 na boca | 2 no gole (cabeça pra trás, caneca inclinada)
+    const iy = [y0 + 1, 9, 8][o];
+    const hy = iy + 1;
     rect(g, L.shirtShade, ax, y0 + 1, 3, 3);
-    rect(g, L.skin, 5, fy + 1, 3, 2);
-    rect(g, '#f1f5f9', 2, fy, 3, 3);
-    rect(g, '#cbd5e1', 4, fy + 1, 1, 2);
-    rect(g, '#6b3f24', 2, fy, 3, 1);
-    if (!o) rect(g, '#dbe4f0', 3, fy - 2, 1, 1);
+    rect(g, L.shirtShade, ax + 1, hy + 2, 2, Math.max(0, y0 + 4 - (hy + 2)));
+    rect(g, L.skin, 5, hy, 3, 2);
+    // caneca (interior x 1..3), alça em x=4, contorno escuro
+    rect(g, EYE, 0, iy - 1, 5, 5);
+    rect(g, '#f1f5f9', 1, iy, 3, 3);
+    rect(g, '#cbd5e1', 3, iy + 1, 1, 2);
+    rect(g, '#cbd5e1', 4, iy, 1, 2);
+    if (o === 2) rect(g, '#6b3f24', 1, iy, 1, 3); else rect(g, '#6b3f24', 1, iy, 3, 1);
+    if (o === 0) { rect(g, '#dbe4f0', 2, iy - 2, 1, 1); rect(g, '#dbe4f0', 3, iy - 3, 1, 1); }
   }
 }
 
@@ -740,13 +795,14 @@ function paintSide(g, L, P) {
   const A = P.armR.m !== 'down' ? P.armR : P.armL;
   if (A.m === 'down' || A.m === 'up' || A.m === 'gest') armSide(g, L, D, A, y0);
 
-  // cabeça
+  // cabeça (com hy<0 a cabeça sobe e o pescoço aparece)
+  if (P.hy < 0) rect(g, L.skinShade, 5, 12 + by + P.hy, 4, -P.hy);
   g.save();
   g.translate(P.hx || 0, 0);
   paintHeadSide(g, L, by + (P.hy || 0), P);
   g.restore();
 
-  if (A.m === 'fwd' || A.m === 'chin' || A.m === 'mug') armSide(g, L, D, A, y0);
+  if (A.m === 'fwd' || A.m === 'chin' || A.m === 'mug' || A.m === 'talk') armSide(g, L, D, A, y0);
 }
 
 
@@ -865,13 +921,14 @@ const POSE_DEFS = {
       { sit: true, eyes: 'down', b: 1, armL: { m: 'fwd', o: 0 }, armR: { m: 'fwd', o: 0 } },
     ][f],
   },
-  // em pé falando e gesticulando
+  // em pé falando e gesticulando: braço em arco (alto -> meio -> baixo), boca abre/fecha,
+  // tronco balança e faz um aceno de cabeça (b:1) no meio da frase
   talk: {
     frames: 3,
     build: (f) => [
-      { mouth: 'open', armR: { m: 'gest', o: 0 } },
-      { mouth: 'small', b: 1, armR: { m: 'gest', o: -1 }, hx: 1 },
-      { mouth: 'open', armR: { m: 'gest', o: -1 }, armL: { m: 'gest', o: 0 } },
+      { mouth: 'open', lx: -1, armR: { m: 'talk', o: 0 } },
+      { mouth: 'small', b: 1, hx: 1, armR: { m: 'talk', o: 1 } },
+      { mouth: 'open', armL: { m: 'talk', o: 1 }, armR: { m: 'talk', o: 2 }, hx: -1 },
     ][f],
   },
   // sentado falando (gesticulação curta)
@@ -915,12 +972,14 @@ const POSE_DEFS = {
       { walkF: 3, b: 0, hx: 1, eyes: 'wide', mouth: 'open', sweat: false, armL: { m: 'up', o: 2, dx: 1 }, armR: { m: 'up', o: 0, dx: 0 } },
     ][f],
   },
-  // em pé tomando café
+  // em pé tomando café, em ciclo: caneca na boca -> gole (cabeça pra trás, olhos fechados,
+  // caneca inclinada) -> abaixa a caneca ao peito (vapor) com um "ahh"
   sip: {
-    frames: 2,
+    frames: 3,
     build: (f) => [
-      { armR: { m: 'mug', o: 0 } },
-      { armR: { m: 'mug', o: 1 }, eyes: 'closed', b: 0 },
+      { lx: -1, eyes: 'up', armR: { m: 'mug', o: 1 } },
+      { lx: -1, hy: -1, eyes: 'closed', armR: { m: 'mug', o: 2 } },
+      { eyes: 'closed', mouth: 'smile', armR: { m: 'mug', o: 0 } },
     ][f],
   },
 };

@@ -8,6 +8,7 @@
 import { TILE, OFFICE, isWalkable } from './office.js';
 import { makeSprite } from './sprites.js';
 import * as Behaviors from './behaviors.js';
+import * as Lighting from './lighting.js';
 
 const SPEED = 3.5;            // tiles por segundo (velocidade base)
 const ACCEL = 10;             // tiles/s² ao arrancar
@@ -29,6 +30,14 @@ const XFADE = 0.14;           // crossfade entre poses (s)
 const EMOTE_DUR = 1.4;        // duração dos emotes (s, <= 1.5)
 const SEP_RADIUS = 0.8;       // tiles — raio de separação entre personagens
 const SEP_MAX = 0.42;         // tiles — deslocamento visual máximo
+// Sombra projetada: distância das duas elipses ao pé. Com a direção padrão
+// (0.98, 0.20) isto reproduz os offsets calibrados originais (+5,+1) e (+4,0).
+const SHADOW_FAR = 5.1;
+const SHADOW_NEAR = 4.08;
+const LIGHT_TINT = 0.22;      // intensidade máxima do tom da luz sobre o sprite
+const LIGHT_MS = 110;         // intervalo de reamostragem da luz (ms)
+// Direção de arte padrão, usada quando lighting.js não está disponível.
+const LIGHT_NONE = { color: '#ffffff', level: 0, dx: 0.98, dy: 0.20 };
 const NAME_FONT = '600 11px system-ui, -apple-system, "Segoe UI", sans-serif';
 const MONO_FONT = '10px ui-monospace, Menlo, Consolas, "Courier New", monospace';
 
@@ -858,6 +867,26 @@ export class Character {
   }
 
   // ---- desenho ------------------------------------------------------------
+  // Luz que alcança o personagem, reamostrada no máximo a cada LIGHT_MS.
+  // Degrada para a direção de arte padrão se lighting.js não expuser lightAt.
+  _light() {
+    const now = (this.time * 1000) | 0;
+    if (this._lightAt !== undefined && now - this._lightT < LIGHT_MS) return this._lightVal;
+    this._lightT = now;
+    if (this._lightAt === undefined) {
+      this._lightAt = typeof Lighting.lightAt === 'function' ? Lighting.lightAt : null;
+    }
+    if (!this._lightAt) { this._lightVal = LIGHT_NONE; return this._lightVal; }
+    try {
+      const v = this._lightAt(this.worldX, this.worldY);
+      this._lightVal = (v && Number.isFinite(v.dx) && Number.isFinite(v.dy)) ? v : LIGHT_NONE;
+    } catch (e) {
+      this._lightAt = null;
+      this._lightVal = LIGHT_NONE;
+    }
+    return this._lightVal;
+  }
+
   draw(ctx) {
     const a = this.agent;
     const fx = Math.round(this.worldX);
@@ -881,13 +910,20 @@ export class Character {
     ctx.strokeStyle = color; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(fx, fy - 1, 17, 7.5, 0, 0, Math.PI * 2); ctx.stroke();
 
-    // sombra projetada: luz vem de cima-esquerda, então cai para BAIXO-DIREITA.
+    // sombra projetada: cai para o lado OPOSTO à luz que alcança o personagem.
+    // Sem luz por perto, _light() devolve a direção de arte padrão (cima-esquerda),
+    // e os offsets abaixo reproduzem exatamente a calibração original (+5,+1 / +4,0).
     // Duas elipses: penumbra larga e suave + núcleo menor mais escuro junto do pé.
+    const li = this._light();
     ctx.fillStyle = '#000';
     ctx.globalAlpha = alpha * 0.14;
-    ctx.beginPath(); ctx.ellipse(fx + 5, fy + 1, 12, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(fx + li.dx * SHADOW_FAR, fy + li.dy * SHADOW_FAR, 12, 4.5, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.globalAlpha = alpha * 0.22;
-    ctx.beginPath(); ctx.ellipse(fx + 4, fy, 9, 3.4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(fx + li.dx * SHADOW_NEAR, fy + li.dy * SHADOW_NEAR, 9, 3.4, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.globalAlpha = alpha;
 
     // sprite: pose atual (com crossfade) ou fallback para o ciclo de caminhada
@@ -896,7 +932,18 @@ export class Character {
     const sp = this.sprite;
     if (typeof sp.drawPose === 'function') {
       const o = this._opts;
-      o.dir = dir; o.scale = 1; o.tint = null;
+      o.dir = dir; o.scale = 1;
+      // Tom da fonte de luz mais próxima (quente perto da luminária, frio perto
+      // do monitor). NÃO escurece por conta própria: a camada de tela cheia do
+      // lighting.js já cuida disso e escurecer de novo dobraria o efeito.
+      if (li.level > 0.05) {
+        const tn = this._tint || (this._tint = { color: '#ffffff', amount: 0 });
+        tn.color = li.color;
+        tn.amount = Math.min(1, li.level) * LIGHT_TINT;
+        o.tint = tn;
+      } else {
+        o.tint = null;
+      }
       if (this._prevPose && this._xf < 1) {
         o.pose = this._prevPose; o.frame = this._prevFrame; o.alpha = 1;
         sp.drawPose(ctx, fx, fy + sit, o);

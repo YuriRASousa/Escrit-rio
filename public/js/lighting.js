@@ -178,5 +178,57 @@ export function renderLightLayer(ctx, tNow) {
   ctx.globalAlpha = prevAlpha;
 }
 
+// ---------------------------------------------------------------------------
+// Amostragem pontual da luz (para sombreado POR PERSONAGEM em characters.js).
+// A camada de tela cheia acima já escurece todo mundo por igual; isto serve para
+// o que ela não consegue: DIREÇÃO da sombra e tom da fonte mais próxima.
+// ---------------------------------------------------------------------------
+
+// Direção padrão quando não há luz por perto: direção de arte do projeto
+// (luz vindo de cima-esquerda, sombra caindo para baixo-direita).
+const DEFAULT_DIR = [0.98, 0.20];
+
+// Queda suave (smoothstep) para a poça não ter borda dura.
+function falloff(d, r) {
+  const t = 1 - d / r;
+  if (t <= 0) return 0;
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Luz resultante no ponto (wx, wy) em coordenadas de MUNDO.
+ * @returns {{color:string, level:number, dx:number, dy:number}}
+ *   color = cor média ponderada das fontes que alcançam o ponto (hex);
+ *   level = 0..1, quanto de luz chega ali;
+ *   dx,dy = vetor unitário apontando DA luz PARA o ponto, ou seja, o lado
+ *           para onde a sombra do personagem deve cair.
+ */
+export function lightAt(wx, wy) {
+  if (!Number.isFinite(wx) || !Number.isFinite(wy)) {
+    return { color: '#ffffff', level: 0, dx: DEFAULT_DIR[0], dy: DEFAULT_DIR[1] };
+  }
+  const lights = getLights();
+  let ar = 0, ag = 0, ab = 0, sum = 0, vx = 0, vy = 0;
+  for (const L of lights) {
+    const r = L.r > 0 ? L.r : 1;
+    const dx = wx - L.x, dy = wy - L.y;
+    const d = Math.hypot(dx, dy);
+    if (d >= r) continue;
+    const w = Math.max(0, Math.min(1, L.intensity)) * falloff(d, r);
+    if (w <= 0) continue;
+    const [cr, cg, cb] = hexToRgb(L.color);
+    ar += cr * w; ag += cg * w; ab += cb * w; sum += w;
+    if (d > 0.001) { vx += (dx / d) * w; vy += (dy / d) * w; }
+  }
+  if (sum <= 0) return { color: '#ffffff', level: 0, dx: DEFAULT_DIR[0], dy: DEFAULT_DIR[1] };
+
+  const hx = (v) => Math.max(0, Math.min(255, Math.round(v / sum))).toString(16).padStart(2, '0');
+  const len = Math.hypot(vx, vy);
+  // Fontes em lados opostos se cancelam: aí cai na direção padrão.
+  const dx = len > 0.05 ? vx / len : DEFAULT_DIR[0];
+  const dy = len > 0.05 ? vy / len : DEFAULT_DIR[1];
+  return { color: '#' + hx(ar) + hx(ag) + hx(ab), level: Math.min(1, sum), dx, dy };
+}
+
 // Só para testes/diagnóstico.
 export function _lightingStats() { return { ...stats }; }
