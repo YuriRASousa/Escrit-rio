@@ -120,6 +120,10 @@ function frame(now) {
   ctx.imageSmoothingEnabled = false;
 
   renderFloor(ctx);
+  // Rótulos das salas logo após o piso: são decoração fixa, então perdem para
+  // nametags e balões, que é a informação viva. Antes brigavam com os balões
+  // dos personagens da fileira de cima.
+  renderZoneLabels(ctx);
 
   // y-sort: quem está mais embaixo desenha por cima
   const sorted = [...characters.values()].sort((a, b) => a.y - b.y);
@@ -127,7 +131,6 @@ function frame(now) {
 
   renderOverlay(ctx);
   renderLightLayer(ctx, now);   // luz e vinheta por cima da cena, antes da UI
-  renderZoneLabels(ctx);
   for (const ch of sorted) ch.drawBubble(ctx);   // balões sempre no topo
 
   ctx.restore();

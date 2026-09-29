@@ -10,11 +10,11 @@
 import { OFFICE, TILE, WORLD_W, WORLD_H } from './office.js';
 
 const REBUILD_MS = 120;                  // intervalo mínimo entre refeitos do brilho
-const AMBIENT = 'rgba(10,14,26,0.30)';   // escurecimento global (valor da direção de arte)
+const AMBIENT = 'rgba(10,14,26,0.20)';   // escurecimento global (valor da direção de arte)
 const FLICKER = 0.03;                    // cintilação das telas: ±3%
-const VIGNETTE_MAX = 0.38;               // opacidade da vinheta nos cantos (calibrar: 0.25–0.5)
-const HOLE_STRENGTH = 0.55;              // quanto uma luz de intensidade 1 "apaga" do ambiente no centro
-const GLOW_STRENGTH = 0.42;              // alpha do centro da poça colorida com intensidade 1
+const VIGNETTE_MAX = 0.24;               // opacidade da vinheta nos cantos (calibrar: 0.25–0.5)
+const HOLE_STRENGTH = 0.72;              // quanto uma luz de intensidade 1 "apaga" do ambiente no centro
+const GLOW_STRENGTH = 0.30;              // alpha do centro da poça colorida com intensidade 1
 
 // Cor e raio padrão por tipo de luz (usados só no fallback).
 // Raios: abajur/luminária ~ 3-4 tiles (96-128px) para não vazar entre salas;
