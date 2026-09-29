@@ -29,8 +29,10 @@ function resize() {
 }
 
 // Folga acima do mapa para os balões de fala dos personagens da fileira de
-// cima não serem cortados pela borda superior da tela.
-const TOP_MARGIN = 80;
+// cima não serem cortados pela borda superior da tela. A fila empilha até 3
+// balões de ~33px com 3px de intervalo, então precisa de ~105px mais o vão
+// acima da cabeça — 80px cortava o balão de cima.
+const TOP_MARGIN = 150;
 
 /** Zoom inicial: cabe o escritório inteiro na tela, com folga. */
 function fitZoom() {
