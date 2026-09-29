@@ -109,6 +109,57 @@ function pick(rand, list) {
   return list[Math.floor(rand() * list.length) % list.length];
 }
 
+// ---------------------------------------------------------------------------
+// Garantia de contraste interno (determinística, NÃO consome PRNG)
+// ---------------------------------------------------------------------------
+// Alguns seeds sorteiam pele, cabelo e camisa em tons quentes quase idênticos
+// (ex.: pele #e0a878 + cabelo dourado + camisa amarela). No sheet isolado dá
+// para distinguir, mas no escritório, a 1x de zoom, o personagem perde toda a
+// silhueta interna e vira um borrão de uma cor só. Aqui afastamos a luminância
+// das regiões que se encostam, preservando o matiz — o personagem continua
+// "o mesmo", só legível.
+const LUMA_MIN = 52;            // separação mínima de luminância (escala 0..255)
+
+function luma(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
+}
+
+/** Afasta `col` de todas as `refs` na luminância, clareando (dir=1) ou escurecendo. */
+function pushAway(col, refs, dir) {
+  let out = col, guard = 0;
+  const minDist = (c) => Math.min(...refs.map((r) => Math.abs(luma(c) - luma(r))));
+  while (minDist(out) < LUMA_MIN && guard++ < 14) {
+    out = dir > 0 ? lighten(out, 0.14) : darken(out, 0.14);
+  }
+  return { col: out, dist: minDist(out) };
+}
+
+/** Escolhe o lado (clarear ou escurecer) que melhor separa `col` de todas as refs. */
+function separate(col, refs) {
+  const up = pushAway(col, refs, 1);
+  const down = pushAway(col, refs, -1);
+  // Empate resolvido pelo lado que menos mexeu na cor original.
+  if (up.dist >= LUMA_MIN && down.dist >= LUMA_MIN) {
+    return Math.abs(luma(up.col) - luma(col)) <= Math.abs(luma(down.col) - luma(col)) ? up.col : down.col;
+  }
+  return up.dist >= down.dist ? up.col : down.col;
+}
+
+/**
+ * Resolve colisões pele/cabelo/camisa. As três regiões se tocam (rosto/nuca e
+ * pescoço/braços), então precisam se separar MUTUAMENTE: tratar os pares em
+ * sequência não funciona, porque afastar a camisa do cabelo pode jogá-la de
+ * volta em cima da pele. Por isso a camisa é separada das duas de uma vez.
+ */
+function ensureContrast(skin, hair, shirt) {
+  if (Math.abs(luma(hair) - luma(skin)) < LUMA_MIN) hair = separate(hair, [skin]);
+  if (Math.min(Math.abs(luma(shirt) - luma(skin)), Math.abs(luma(shirt) - luma(hair))) < LUMA_MIN) {
+    shirt = separate(shirt, [skin, hair]);
+  }
+  return { skin, hair, shirt };
+}
+
 // Sorteia a aparência completa a partir do seed.
 // ATENÇÃO: a ordem das chamadas ao PRNG é o que garante "mesmo seed = mesmo personagem".
 // Sorteios novos entram SEMPRE no final da sequência.
@@ -159,6 +210,10 @@ function makeLook(seed) {
   const earring = eEar < 0.16 && accessory !== 'headphones';
   const eyeStyle = eEye < 0.4 ? 1 : 0;
   const neckColor = pick(() => eTieI, TIES);
+
+  // Último passo: garante que pele, cabelo e camisa não fiquem no mesmo tom.
+  // Vem depois de todos os sorteios, então não altera a sequência do PRNG.
+  ({ skin, hair, shirt } = ensureContrast(skin, hair, shirt));
 
   return {
     skin, skinShade: darken(skin, 0.18), blush: mix(skin, '#ff7a90', 0.35),
