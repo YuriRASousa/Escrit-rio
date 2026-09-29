@@ -21,6 +21,23 @@ gerado proceduralmente em canvas.
 
 ## Como rodar
 
+### Windows (jeito facil)
+
+Duplo clique em **`iniciar.bat`**. Ele confere o Node, instala as dependencias
+na primeira vez, sobe o servidor, espera ele responder e abre o navegador.
+
+```
+  [1]  Iniciar (servidor + navegador)
+  [2]  Iniciar com simulacao (demo)
+  [3]  Parar tudo
+  [4]  Sair
+```
+
+Use a opcao **[2]** na primeira vez: ela liga a simulacao junto, entao o
+escritorio ja aparece cheio de agentes conversando.
+
+### Qualquer sistema (manual)
+
 ```bash
 npm install
 npm start           # http://localhost:4317
