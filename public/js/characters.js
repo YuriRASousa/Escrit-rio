@@ -403,10 +403,13 @@ export class Character {
     ctx.strokeStyle = color; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(fx, fy - 1, 17, 7.5, 0, 0, Math.PI * 2); ctx.stroke();
 
-    // sombra elíptica
-    ctx.globalAlpha = alpha * 0.28;
+    // sombra projetada: luz vem de cima-esquerda, então cai para BAIXO-DIREITA.
+    // Duas elipses: penumbra larga e suave + núcleo menor mais escuro junto do pé.
     ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.ellipse(fx, fy - 1, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = alpha * 0.14;
+    ctx.beginPath(); ctx.ellipse(fx + 5, fy + 1, 12, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = alpha * 0.22;
+    ctx.beginPath(); ctx.ellipse(fx + 4, fy, 9, 3.4, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = alpha;
 
     // sprite: walk cycle, ou bob/digitação parado

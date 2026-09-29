@@ -7,7 +7,15 @@ const LH = 24;          // altura lógica do quadro (px)
 const SCALE = 2;        // fator de escala do spritesheet final
 const DIRS = ['down', 'up', 'left', 'right'];
 const FRAMES = 4;       // frames de caminhada por direção
-const OUTLINE = '#1a1325';
+const OUTLINE = '#1a1325';        // contorno lateral/superior (mais claro)
+const OUTLINE_BOTTOM = '#0a0612'; // contorno inferior (mais escuro: peso e chão)
+// Luz vem de CIMA-ESQUERDA (docs/ART.md). O sombreado lateral é feito no
+// pós-processamento por linha (ver shadeCell), pois assim segue a direção final
+// mesmo nos quadros espelhados (vista 'right').
+const LIGHT_LEFT = 0.14;   // 1px da borda esquerda: ~1 tom mais claro
+const SHADE_RIGHT = 0.26;  // borda direita: 1 tom mais escuro
+const SHADE_RIGHT2 = 0.10; // 2o pixel da direita: transição suave
+const RIM = 0.42;          // rim light no topo-esquerdo da cabeça
 
 // ---------------------------------------------------------------------------
 // PRNG determinístico: hash FNV-1a da string -> mulberry32
@@ -138,7 +146,6 @@ function paintFrontBack(g, L, back, frame) {
 
   // torso
   rect(g, L.shirt, 4, 12 + b, 8, 6);
-  rect(g, L.shirtShade, 11, 12 + b, 1, 6);
   rect(g, L.pantsShade, 4, 17 + b, 8, 1); // cinto
   if (L.shirtStyle === 'stripe') rect(g, L.shirtLight, 4, 14 + b, 8, 1);
   if (!back) {
@@ -239,7 +246,6 @@ function paintSide(g, L, frame) {
 
   // torso
   rect(g, L.shirt, 5, 12 + b, 6, 6);
-  rect(g, L.shirtShade, 10, 12 + b, 1, 6);
   rect(g, L.pantsShade, 5, 17 + b, 6, 1);
   if (L.shirtStyle === 'stripe') rect(g, L.shirtLight, 5, 14 + b, 6, 1);
 
@@ -291,19 +297,62 @@ function paintSide(g, L, frame) {
   }
 }
 
-// Contorno escuro de 1px ao redor dos pixels opacos (pós-processamento)
+// Sombreado direcional + rim light (pós-processamento, ANTES do contorno).
+// Por linha, acha o pixel opaco mais à esquerda/direita: esquerda clareia, direita escurece.
+function shadeCell(src) {
+  const idx = (x, y) => (y * LW + x) * 4;
+  const solid = (x, y) => x >= 0 && y >= 0 && x < LW && y < LH && src[idx(x, y) + 3] > 0;
+  const tint = (x, y, target, t) => {
+    const i = idx(x, y);
+    src[i] = src[i] + (target - src[i]) * t;
+    src[i + 1] = src[i + 1] + (target - src[i + 1]) * t;
+    src[i + 2] = src[i + 2] + (target - src[i + 2]) * t;
+  };
+  // copia para decidir com base no desenho original (sem efeito cascata)
+  const orig = new Uint8ClampedArray(src);
+  const os = (x, y) => x >= 0 && y >= 0 && x < LW && y < LH && orig[idx(x, y) + 3] > 0;
+  let top = -1;
+  for (let y = 0; y < LH && top < 0; y++) for (let x = 0; x < LW; x++) if (os(x, y)) { top = y; break; }
+  for (let y = 0; y < LH; y++) {
+    let minX = -1, maxX = -1;
+    for (let x = 0; x < LW; x++) if (os(x, y)) { if (minX < 0) minX = x; maxX = x; }
+    if (minX < 0) continue;
+    if (maxX - minX >= 2) {
+      tint(minX, y, 255, LIGHT_LEFT);
+      tint(maxX, y, 0, SHADE_RIGHT);
+      if (os(maxX - 1, y)) tint(maxX - 1, y, 0, SHADE_RIGHT2);
+    }
+  }
+  // rim light de 1px: borda superior da metade esquerda + borda esquerda perto do topo
+  if (top >= 0) {
+    for (let y = top; y < Math.min(LH, top + 5); y++) {
+      for (let x = 0; x < LW; x++) {
+        if (!os(x, y)) continue;
+        const topEdge = !os(x, y - 1) && x <= 8;
+        const leftEdge = !os(x - 1, y) && y <= top + 3;
+        if (topEdge || leftEdge) tint(x, y, 255, RIM);
+      }
+    }
+  }
+}
+
+// Contorno escuro de 1px ao redor dos pixels opacos (pós-processamento).
+// O contorno de BAIXO (pixel vazio com pixel opaco acima) é mais escuro que o resto.
 function outlineCell(g, cx, cy) {
   const img = g.getImageData(cx, cy, LW, LH);
   const src = img.data;
+  shadeCell(src);
   const out = new Uint8ClampedArray(src);
   const [or, og, ob] = hexToRgb(OUTLINE);
+  const [br, bg, bb] = hexToRgb(OUTLINE_BOTTOM);
   const solid = (x, y) => x >= 0 && y >= 0 && x < LW && y < LH && src[(y * LW + x) * 4 + 3] > 0;
   for (let y = 0; y < LH; y++) {
     for (let x = 0; x < LW; x++) {
       if (solid(x, y)) continue;
       if (solid(x - 1, y) || solid(x + 1, y) || solid(x, y - 1) || solid(x, y + 1)) {
         const i = (y * LW + x) * 4;
-        out[i] = or; out[i + 1] = og; out[i + 2] = ob; out[i + 3] = 255;
+        const below = solid(x, y - 1);
+        out[i] = below ? br : or; out[i + 1] = below ? bg : og; out[i + 2] = below ? bb : ob; out[i + 3] = 255;
       }
     }
   }
