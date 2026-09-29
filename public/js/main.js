@@ -4,6 +4,7 @@
 import { TILE, OFFICE, WORLD_W, WORLD_H, renderFloor, renderOverlay, renderZoneLabels, zoneForTeam, freeSeat }
   from './office.js';
 import { Character } from './characters.js';
+import { renderLightLayer } from './lighting.js';
 import { store, subscribe } from './store.js';
 import { connect } from './net.js';
 import { initUI } from './ui.js';
@@ -125,6 +126,7 @@ function frame(now) {
   for (const ch of sorted) ch.draw(ctx);
 
   renderOverlay(ctx);
+  renderLightLayer(ctx, now);   // luz e vinheta por cima da cena, antes da UI
   renderZoneLabels(ctx);
   for (const ch of sorted) ch.drawBubble(ctx);   // balões sempre no topo
 
