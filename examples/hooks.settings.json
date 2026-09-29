@@ -1,0 +1,27 @@
+{
+  "_comment": "Cole estes hooks no seu ~/.claude/settings.json para empurrar eventos direto para o escritório (http://localhost:4317). Requer o servidor rodando; o `|| true` garante que o hook nunca quebre sua sessão se o escritório estiver fechado.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s -m 1 -X POST localhost:4317/api/event -H 'content-type: application/json' -d \"{\\\"agent\\\":{\\\"id\\\":\\\"$CLAUDE_SESSION_ID\\\",\\\"name\\\":\\\"Claude\\\",\\\"status\\\":\\\"working\\\",\\\"activity\\\":\\\"$CLAUDE_TOOL_NAME\\\"}}\" >/dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s -m 1 -X POST localhost:4317/api/event -H 'content-type: application/json' -d \"{\\\"agent\\\":{\\\"id\\\":\\\"$CLAUDE_SESSION_ID\\\",\\\"name\\\":\\\"Claude\\\",\\\"status\\\":\\\"idle\\\",\\\"activity\\\":\\\"aguardando\\\"}}\" >/dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ]
+  }
+}

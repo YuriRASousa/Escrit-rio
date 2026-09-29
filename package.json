@@ -1,0 +1,18 @@
+{
+  "name": "escritorio-virtual",
+  "version": "0.1.0",
+  "description": "Escritório virtual estilo Gather para visualizar agentes do Claude Code trabalhando juntos",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "demo": "node scripts/demo.js"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "express": "^5.1.0",
+    "ws": "^8.18.3"
+  },
+  "engines": { "node": ">=20" }
+}

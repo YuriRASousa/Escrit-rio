@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Escritório dos Agentes</title>
+<style>
+  :root {
+    --bg: #0e1117; --panel: #161b26; --panel-2: #1d2330; --line: #2a3242;
+    --txt: #e6eaf2; --muted: #8b95a8; --accent: #4ade80;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--txt); overflow: hidden; }
+  #app { display: flex; height: 100vh; }
+  #stage { position: relative; flex: 1; min-width: 0; }
+  canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; cursor: grab; }
+  canvas.dragging { cursor: grabbing; }
+
+  /* HUD superior */
+  #hud {
+    position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; align-items: center;
+    background: rgba(14,17,23,.82); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 12px; font-size: 12px; backdrop-filter: blur(6px);
+  }
+  #hud b { font-weight: 600; letter-spacing: .3px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .sep { width: 1px; height: 16px; background: var(--line); }
+  #hud .stat { color: var(--muted); }
+  #hud .stat span { color: var(--txt); }
+
+  /* Painel lateral */
+  #side {
+    width: 320px; flex: 0 0 320px; background: var(--panel); border-left: 1px solid var(--line);
+    display: flex; flex-direction: column;
+  }
+  #side h2 {
+    margin: 0; padding: 14px 14px 10px; font-size: 11px; letter-spacing: 1.4px;
+    text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line);
+  }
+  #agents { overflow-y: auto; flex: 0 0 auto; max-height: 45%; }
+  .agent {
+    padding: 9px 14px; border-bottom: 1px solid var(--line); cursor: pointer;
+    display: flex; gap: 9px; align-items: flex-start;
+  }
+  .agent:hover { background: var(--panel-2); }
+  .agent.sel { background: var(--panel-2); box-shadow: inset 3px 0 0 var(--accent); }
+  .agent .meta { min-width: 0; flex: 1; }
+  .agent .nm { font-size: 12px; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+  .agent .nm em { font-style: normal; font-size: 9px; color: var(--muted); border: 1px solid var(--line);
+                  border-radius: 4px; padding: 1px 4px; }
+  .agent .ac { font-size: 10.5px; color: var(--muted); margin-top: 3px; white-space: nowrap;
+               overflow: hidden; text-overflow: ellipsis; }
+  #feed { flex: 1; overflow-y: auto; border-top: 1px solid var(--line); }
+  .msg { padding: 8px 14px; border-bottom: 1px solid rgba(42,50,66,.5); font-size: 11px; line-height: 1.45; }
+  .msg .who { color: var(--accent); font-weight: 600; }
+  .msg .arrow { color: var(--muted); }
+  .msg .tx { color: #c3cbdb; margin-top: 2px; word-break: break-word; }
+  .msg.kind-tool .tx { color: #7fb4ff; }
+  .msg.kind-thought .tx { color: #b39ddb; font-style: italic; }
+  .msg.kind-system .tx { color: var(--muted); }
+  .msg .ts { float: right; color: #5b6478; font-size: 9.5px; }
+
+  #empty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    pointer-events: none; text-align: center; font-size: 13px; color: var(--muted); line-height: 1.8;
+  }
+  #empty.hidden { display: none; }
+  #empty code { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; color: var(--txt); }
+  #help {
+    position: absolute; bottom: 12px; left: 12px; font-size: 10.5px; color: var(--muted);
+    background: rgba(14,17,23,.82); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+  }
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-thumb { background: #2a3242; border-radius: 4px; }
+  @media (max-width: 860px) { #side { display: none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <div id="hud">
+      <b>🏢 Escritório dos Agentes</b>
+      <div class="sep"></div>
+      <span class="stat"><span class="dot" id="conn"></span> <span id="conn-t">conectando…</span></span>
+      <div class="sep"></div>
+      <span class="stat">agentes <span id="n-agents">0</span></span>
+      <span class="stat">ativos <span id="n-live">0</span></span>
+      <span class="stat">tokens <span id="n-tok">0</span></span>
+    </div>
+    <div id="empty">
+      <div>
+        Nenhum agente no escritório ainda.<br>
+        Abra uma sessão do Claude Code — ou rode <code>npm run demo</code> para ver a simulação.
+      </div>
+    </div>
+    <div id="help">arrastar = mover câmera · roda = zoom · clique no agente = seguir · espaço = recentrar</div>
+  </div>
+  <aside id="side">
+    <h2>Agentes</h2>
+    <div id="agents"></div>
+    <h2>Conversas</h2>
+    <div id="feed"></div>
+  </aside>
+</div>
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
