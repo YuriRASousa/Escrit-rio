@@ -143,7 +143,7 @@ function drawCheckerTile(c, tx, ty) {
   const x = tx * TILE, y = ty * TILE;
   for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) {
     const dark = ((tx * 2 + i + ty * 2 + j) & 1) === 0;
-    rect(c, x + i * 16, y + j * 16, 16, 16, dark ? '#7b8595' : '#8c96a6');
+    rect(c, x + i * 16, y + j * 16, 16, 16, dark ? '#5d7f80' : '#6b8f90');
     rect(c, x + i * 16, y + j * 16, 16, 1, 'rgba(255,255,255,0.10)');
     rect(c, x + i * 16, y + j * 16 + 15, 16, 1, 'rgba(0,0,0,0.16)');
   }

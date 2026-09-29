@@ -27,9 +27,14 @@ function resize() {
   fitZoom();
 }
 
+// Folga acima do mapa para os balões de fala dos personagens da fileira de
+// cima não serem cortados pela borda superior da tela.
+const TOP_MARGIN = 80;
+
 /** Zoom inicial: cabe o escritório inteiro na tela, com folga. */
 function fitZoom() {
-  const z = Math.min(canvas.width / dpr / WORLD_W, canvas.height / dpr / WORLD_H) * 0.95;
+  const z = Math.min(canvas.width / dpr / WORLD_W,
+                     canvas.height / dpr / (WORLD_H + TOP_MARGIN)) * 0.95;
   cam.targetZoom = clamp(z, 0.35, 3);
   if (!cam.touched) cam.zoom = cam.targetZoom;
 }
@@ -83,11 +88,12 @@ function updateCamera(dt) {
   }
   cam.zoom += (cam.targetZoom - cam.zoom) * Math.min(1, dt * 8);
 
-  // não deixa a câmera sair do mundo
+  // não deixa a câmera sair do mundo (o topo ganha TOP_MARGIN de folga)
   const halfW = canvas.width / dpr / 2 / cam.zoom;
   const halfH = canvas.height / dpr / 2 / cam.zoom;
+  const top = -TOP_MARGIN, bottom = WORLD_H;
   cam.x = halfW * 2 >= WORLD_W ? WORLD_W / 2 : clamp(cam.x, halfW, WORLD_W - halfW);
-  cam.y = halfH * 2 >= WORLD_H ? WORLD_H / 2 : clamp(cam.y, halfH, WORLD_H - halfH);
+  cam.y = halfH * 2 >= bottom - top ? (top + bottom) / 2 : clamp(cam.y, top + halfH, bottom - halfH);
 }
 
 /* ---------------------------------------------------------------- loop */
@@ -159,7 +165,7 @@ function initInput() {
   addEventListener('resize', resize);
 }
 
-function recenter() { cam.x = WORLD_W / 2; cam.y = WORLD_H / 2; }
+function recenter() { cam.x = WORLD_W / 2; cam.y = (WORLD_H - TOP_MARGIN) / 2; }
 
 /* --------------------------------------------------------------- start */
 

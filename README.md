@@ -5,6 +5,8 @@ Um escritório virtual em pixel art, estilo [Gather.town](https://gather.town), 
 subagente vira um personagem que anda, senta na mesa do seu time, mostra o que está
 fazendo e solta balões de fala quando pensa, chama uma ferramenta ou responde.
 
+![preview do escritório](docs/preview.png)
+
 Roda 100% local. Sem build, sem framework, sem assets externos — todo o pixel art é
 gerado proceduralmente em canvas.
 
