@@ -77,12 +77,13 @@ const TWO_PI = Math.PI * 2;
 const POSE_FALLBACK = {
   sit: ['idle'], type: ['sit', 'idle'], think: ['sit', 'idle'], sleep: ['sit', 'idle'],
   cheer: ['idle'], panic: ['idle'], sip: ['idle'], talk: ['idle'], idle: ['walk'],
+  sittalk: ['sit', 'talk', 'idle'],
 };
 const POSE_FPS = {
   walk: 0, idle: 1.6, sit: 1.2, type: 7, talk: 6, think: 1.5,
-  sleep: 0.8, cheer: 5, panic: 8, sip: 1.5,
+  sleep: 0.8, cheer: 5, panic: 8, sip: 1.5, sittalk: 6,
 };
-const SEATED_POSES = { sit: 1, type: 1, think: 1, sleep: 1 };
+const SEATED_POSES = { sit: 1, type: 1, think: 1, sleep: 1, sittalk: 1 };
 
 // Aliases de nome de emote (inclui os que behaviors.js emite: check, sweat, talk)
 const EMOTE_ALIAS = {
@@ -788,14 +789,16 @@ export class Character {
       if (this.time < o.until) return o.pose;
       this.poseOverride = null;
     }
-    if (this._hasTalkBubble()) return 'talk';
     const st = this.agent.status;
     const seated = this.seated;
+    // 'talk' é pose em pé e 'sittalk' é a versão sentada (ambas do sprites.js)
+    if (this._hasTalkBubble()) return seated ? 'sittalk' : 'talk';
     switch (st) {
       case 'error': if (this._statusPhase < PANIC_TIME) return 'panic'; break;
       case 'done': if (this._statusPhase < CHEER_TIME) return 'cheer'; break;
       case 'working': return seated ? 'type' : 'idle';
-      case 'thinking': return 'think';
+      // think e sleep são poses SENTADAS: em pé, quem pensa fica em idle
+      case 'thinking': return seated ? 'think' : 'idle';
       case 'waiting': break;
       default:
         if (seated && this.time - this.statusSince > SLEEP_AFTER) return 'sleep';
