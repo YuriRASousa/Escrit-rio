@@ -19,9 +19,23 @@ gerado proceduralmente em canvas.
                         POST /api/event ──┘  (hooks ou qualquer outro sistema de agentes)
 ```
 
-## Como rodar
+## Como instalar
 
-### Windows (jeito facil)
+### Windows — instalador (mais facil, nao precisa de Node)
+
+Baixe o instalador na pagina de [Releases](https://github.com/YuriRASousa/Escrit-rio/releases)
+e execute. Ele cria atalho na area de trabalho e no menu iniciar. Tambem ha uma
+versao **portatil**, um `.exe` unico que roda sem instalar.
+
+O app abre numa janela propria, sem terminal e sem navegador. Tudo roda na sua
+maquina: o servidor interno escuta so em `127.0.0.1`.
+
+Se o escritorio aparecer vazio, ligue o **modo demonstracao** com `Ctrl+D` — com
+poucos agentes reais quase nada acontece, e o demo mostra como fica cheio.
+
+## Como rodar a partir do codigo
+
+### Windows (com Node instalado)
 
 Duplo clique em **`iniciar.bat`**. Ele confere o Node, instala as dependencias
 na primeira vez, sobe o servidor, espera ele responder e abre o navegador.
@@ -40,8 +54,20 @@ escritorio ja aparece cheio de agentes conversando.
 
 ```bash
 npm install
-npm start           # http://localhost:4317
+npm start           # servidor + navegador: http://localhost:4317
+npm run app         # janela do Electron (o mesmo app que vai na release)
+npm test            # invariantes do mapa, ingest, sprites e poses
 ```
+
+Para gerar o executavel localmente (precisa do sistema alvo):
+
+```bash
+npm run dist:win    # instalador e portatil para Windows
+npm run dist        # alvo do sistema em que voce esta
+```
+
+A release e publicada automaticamente pelo GitHub Actions quando uma tag `v*`
+e empurrada; o build roda num runner Windows de verdade.
 
 Abra o navegador. Se você já tiver sessões do Claude Code na máquina, os agentes
 aparecem sozinhos. Para ver o escritório cheio sem depender de sessão real:

@@ -1,6 +1,7 @@
 // demo.js — simula um escritório de agentes via POST /api/event (sem deps extras).
-const PORT = process.env.PORT || 4317;
-const URL_EVENT = `http://localhost:${PORT}/api/event`;
+let PORT = process.env.PORT || 4317;
+let URL_EVENT = `http://127.0.0.1:${PORT}/api/event`;
+let rodando = false;           // laço ativo? usado pelo modo demo do app
 
 const boss = { id: 'demo-lider', name: 'Opus 5 (líder)', role: 'orchestrator', model: 'opus-5', team: 'DEV TEAM' };
 const workers = [
@@ -61,12 +62,32 @@ async function step() {
   }
 }
 
-console.log(`Demo do Escritório Virtual — enviando eventos para ${URL_EVENT} (Ctrl+C para parar)`);
-await send(boss.id, { status: 'thinking', activity: 'Planejando o sprint' }, 'Bom dia, time! Vamos ao trabalho.', 'prompt');
-for (const w of workers) await send(w.id, { status: 'waiting', activity: 'Aguardando tarefa' });
-(async function loop() {
-  for (;;) {
-    try { await step(); } catch (e) { console.log('[erro]', e.message); }
-    await new Promise((r) => setTimeout(r, 1000 + Math.random() * 2000));
-  }
-})();
+/**
+ * Liga a simulação. Devolve uma função que a desliga.
+ * Existe como função porque o app empacotado não tem `npm run demo`, e com
+ * poucos agentes reais o escritório parece vazio (ver HANDOFF, seção 9).
+ */
+export function startDemo(opts = {}) {
+  if (opts.port) { PORT = opts.port; URL_EVENT = `http://127.0.0.1:${PORT}/api/event`; }
+  if (rodando) return () => {};
+  rodando = true;
+
+  (async () => {
+    await send(boss.id, { status: 'thinking', activity: 'Planejando o sprint' }, 'Bom dia, time! Vamos ao trabalho.', 'prompt');
+    for (const w of workers) await send(w.id, { status: 'waiting', activity: 'Aguardando tarefa' });
+    while (rodando) {
+      try { await step(); } catch (e) { if (rodando) console.log('[erro]', e.message); }
+      await new Promise((r) => setTimeout(r, 1000 + Math.random() * 2000));
+    }
+  })();
+
+  return () => { rodando = false; };
+}
+
+export function demoAtivo() { return rodando; }
+
+// Uso por linha de comando: `npm run demo`
+if (import.meta.url === `file://${process.argv[1]}`) {
+  console.log(`Demo do Escritório Virtual — enviando eventos para ${URL_EVENT} (Ctrl+C para parar)`);
+  startDemo();
+}

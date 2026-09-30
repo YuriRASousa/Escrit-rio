@@ -1,14 +1,17 @@
 {
   "name": "escritorio-virtual",
   "version": "0.1.0",
-  "description": "Escritório virtual estilo Gather para visualizar agentes do Claude Code trabalhando juntos",
+  "description": "Escritório virtual em pixel art que mostra os agentes do Claude Code trabalhando e conversando em tempo real",
   "type": "module",
-  "main": "server/index.js",
+  "main": "app/main.cjs",
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "demo": "node scripts/demo.js",
-    "test": "node test/run.mjs && node .claude/skills/sprite-sheet/scripts/measure.mjs"
+    "test": "node test/run.mjs && node .claude/skills/sprite-sheet/scripts/measure.mjs",
+    "app": "electron .",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
@@ -17,5 +20,75 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "electron": "^44.5.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.yurirasousa.escritorio-agentes",
+    "productName": "Escritorio dos Agentes",
+    "copyright": "Copyright (c) 2026 Yuri Sousa",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "app/**/*",
+      "server/**/*",
+      "public/**/*",
+      "scripts/demo.js",
+      "build/icon.png",
+      "package.json",
+      "!**/*.map"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Escritorio dos Agentes"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portatil.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Development"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "YuriRASousa",
+        "repo": "Escrit-rio",
+        "releaseType": "release"
+      }
+    ]
   }
 }

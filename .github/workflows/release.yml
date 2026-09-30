@@ -1,0 +1,43 @@
+name: Release
+
+# Publica o executável quando uma tag v* é empurrada.
+# Também dá para disparar à mão pela aba Actions (workflow_dispatch).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write        # necessário para o electron-builder criar a release
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      # Não vale empacotar algo que não passa nos próprios testes.
+      - name: Testes
+        run: npm test
+
+      - name: Empacotar e publicar
+        run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Sobe também como artefato do run, para dar para baixar mesmo se a
+      # publicação da release falhar por permissão.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-instalador
+          path: |
+            release/*.exe
+            release/*.blockmap
+          if-no-files-found: warn
