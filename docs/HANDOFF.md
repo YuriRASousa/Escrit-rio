@@ -198,6 +198,44 @@ mexi — `sprites.js` é do outro canal e alterar desenho lá arriscaria os limi
 do `measure.mjs`. Se for tratar, o caminho é dar detalhe interno ao cabelo na
 vista `up` (risca, mecha ou variação de tom), sem tocar na ordem do PRNG.
 
+## 7c. Rodada do canal da nuvem — estrutura e repaginação visual
+
+**Estrutural**
+- **Servidor só no loopback.** `server.listen(port)` sem host escutava em
+  `0.0.0.0`, e o app serve comandos de shell, caminhos e prompts das sessões sem
+  autenticação. Agora `HOST` vale `127.0.0.1` por padrão; `HOST=0.0.0.0` libera e
+  imprime aviso.
+- **`npm test`** (novo, `test/run.mjs`): 22 asserts cobrindo invariantes do mapa,
+  validação do ingest, contraste e determinismo dos sprites, mais a `measure.mjs`
+  das poses. Sem dependência nova — usa o mock de canvas da skill sprite-sheet.
+  CI em `.github/workflows/ci.yml` roda sintaxe, testes e fumaça do servidor.
+- **Faixa de erro na tela**: script inline em `index.html` ANTES do módulo. Tem de
+  ficar antes, senão não captura falha no carregamento do próprio `main.js` — que
+  é justamente o caso da tela congelada da armadilha 3.
+
+**Visual**
+- Pisos neutros; a cor do time vem de tapete, cadeiras, parede e luminárias.
+- Cada sala ganhou layout próprio (ilhas na DEV, cascata na Deployment, bancada em
+  zigue-zague na Housekeeping, canto de conversa no Boardroom, pingue-pongue no
+  Lounge). 66 assentos, 109 luzes.
+- **`renderProps(ctx, tNow)`** (novo export de `office.js`): camada animada com
+  cursores, LEDs, vapor, relógios. Chamada em `main.js` logo após `renderFloor`,
+  abaixo dos personagens. 221 fillRect por frame; medido, não custou FPS.
+- **Nametags por contexto** em `characters.js`: aparecem se selecionado, sob o
+  cursor, falando, ou zoom >= `NAMETAG_ZOOM_MIN`. O worker propôs 0.9; baixei para
+  **0.6** depois de ver renderizado, porque 0.9 escondia TODOS os nomes no zoom
+  padrão (~0.69), e ver quem é quem é o ponto do app. Há anti-sobreposição.
+- **`hitTest(wx, wy)`** em `characters.js`: `main.js` usa para hover e para clicar
+  no personagem no mapa.
+
+**INVARIANTE NOVA:** `main.js` distribui assento por hash do id do agente
+(`assentoEspalhado`), não pelo `freeSeat` puro. `freeSeat` devolve sempre o
+primeiro livre, e com ele todos os agentes se amontoavam no mesmo canto da sala.
+`freeSeat` continua como fallback quando a sala lota.
+
+**Desempenho medido:** 60fps com 50 agentes, já com os props animados. Com 150
+agentes cai para ~37fps.
+
 ## 8. Pendências conhecidas
 
 - **Cabeças de personagens carecas** ficam parecidas entre si: o estilo `bald`

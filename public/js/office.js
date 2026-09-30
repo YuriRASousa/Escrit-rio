@@ -203,7 +203,9 @@ function carve() {
 // ---------------------------------------------------------------------------
 
 /** Piso de madeira escura: tábuas com juntas alternadas, veios de 1px e variação por tile. */
-function drawWoodTile(c, tx, ty) {
+const WOOD_DARK = { a: '#4b3426', b: '#523829', c: '#47301f', hi: '#5d4331', lo: '#3a2719', gap: '#33221a' };
+const WOOD_OAK = { a: '#ad8c66', b: '#b5946d', c: '#a6845e', hi: '#c4a680', lo: '#8a6b48', gap: '#7a5c3c' };
+function drawWoodTile(c, tx, ty, P = WOOD_DARK) {
   const x0 = tx * TILE;
   for (let i = 0; i < 4; i++) {
     const r = ty * 4 + i;
@@ -215,7 +217,7 @@ function drawWoodTile(c, tx, ty) {
       const k = Math.floor(gx / 64);
       const segEnd = Math.min(TILE, px + (64 - (gx % 64)));
       const v = hash(r, k, 7);
-      const base = v < 0.33 ? '#4b3426' : v < 0.66 ? '#523829' : '#47301f';
+      const base = v < 0.33 ? P.a : v < 0.66 ? P.b : P.c;
       rect(c, x0 + px, y, segEnd - px, 8, base);
       // veios: 1-3 riscos de 1px, escuros ou claros, de baixo contraste
       const nv = 1 + Math.floor(hash(r, k * 5 + px, 21) * 3);
@@ -225,9 +227,9 @@ function drawWoodTile(c, tx, ty) {
         const len = Math.min(6 + Math.floor(hash(j, r + k + px, 24) * 12), x0 + segEnd - vx);
         rect(c, vx, vy, len, 1, hash(j, r + px, 26) > 0.5 ? shade(base, -0.10) : shade(base, 0.07));
       }
-      rect(c, x0 + px, y, segEnd - px, 1, '#5d4331');   // brilho superior (luz de cima)
-      rect(c, x0 + px, y + 7, segEnd - px, 1, '#3a2719'); // fresta
-      if ((gx % 64) === 0 || px === 0 && (gx % 64) < 1) rect(c, x0 + px, y, 1, 8, '#33221a');
+      rect(c, x0 + px, y, segEnd - px, 1, P.hi);   // brilho superior (luz de cima)
+      rect(c, x0 + px, y + 7, segEnd - px, 1, P.lo); // fresta
+      if ((gx % 64) === 0 || px === 0 && (gx % 64) < 1) rect(c, x0 + px, y, 1, 8, P.gap);
       px = segEnd;
     }
   }
@@ -236,7 +238,7 @@ function drawWoodTile(c, tx, ty) {
 }
 
 /** Carpete com granulado, manchas largas (2x2 tiles) e leve variação. */
-function drawCarpetTile(c, tx, ty, col) {
+function drawCarpetTile(c, tx, ty, col, seam = false) {
   const x = tx * TILE, y = ty * TILE;
   rect(c, x, y, TILE, TILE, ((tx + ty) & 1) ? shade(col, 0.03) : col);
   // mancha larga: baixa frequência (compartilhada por blocos 2x2) => "tecido desgastado"
@@ -249,6 +251,10 @@ function drawCarpetTile(c, tx, ty, col) {
   for (let i = 0; i < 22; i++) {
     const hx = Math.floor(hash(tx * 31 + i, ty, 1) * 30), hy = Math.floor(hash(tx, ty * 31 + i, 2) * 31);
     rect(c, x + hx, y + hy, 2, 1, hash(i, tx + ty, 3) > 0.5 ? shade(col, 0.13) : shade(col, -0.13));
+  }
+  if (seam) {                                              // placas de carpete: junta de 1px
+    rect(c, x, y, TILE, 1, 'rgba(0,0,0,0.10)'); rect(c, x, y, 1, TILE, 'rgba(0,0,0,0.10)');
+    rect(c, x + 1, y + 1, TILE - 1, 1, 'rgba(255,255,255,0.03)');
   }
 }
 
@@ -273,11 +279,12 @@ function drawWallTile(c, tx, ty) {
     const zi = zoneGrid[idx(tx, ty + 1)];
     const accent = zi >= 0 ? zones[zi].color : '#5a6484';
     rect(c, x, y + 11, TILE, 1, '#6a77a0');         // quina frontal do cap pega a luz
-    rect(c, x, y + 12, TILE, 20, '#293049');        // face frontal (-22% do corpo)
+    const paint = zi >= 0 && zones[zi].kind !== 'server' ? wallPaint(zones[zi]) : '#293049';
+    rect(c, x, y + 12, TILE, 20, paint);            // face frontal pintada com a cor do time (-22% do corpo)
     fade(c, x, y + 12, TILE, 6, 'down', 0.10, '255,255,255'); // reflexo suave logo abaixo do cap
     // painéis verticais (juntas de drywall), 1px, baixo contraste
-    rect(c, x + 15, y + 19, 1, 9, '#232a41');
-    rect(c, x + 16, y + 19, 1, 9, '#333b58');
+    rect(c, x + 15, y + 19, 1, 9, shade(paint, -0.15));
+    rect(c, x + 16, y + 19, 1, 9, shade(paint, 0.12));
     // friso colorido da zona (a cor do time aparece na face)
     rect(c, x, y + 17, TILE, 3, accent);
     rect(c, x, y + 17, TILE, 1, shade(accent, 0.25));
@@ -490,7 +497,8 @@ function drawMonitor(c, x, y, seed, flip) {
  * escuro, pés metálicos, gaveteiro (lado varia pelo seed), cabos descendo pela
  * frente e objetos soltos (caneca, papéis, post-it, mousepad, teclado, mouse).
  */
-function drawDesk(c, tx, ty, w, seed) {
+function drawDesk(c, tx, ty, w, seed, opt) {
+  const vs = opt && opt.vs, mon = !(opt && opt.mon === false);
   const x = tx * TILE, W = w * TILE, H = 10;
   const y0 = ty * TILE + 2, D = 28;                // base [y0, y0+28]
   const t = ty * TILE - H;                         // topo do tampo (superfície t+2 .. t+30)
@@ -526,21 +534,21 @@ function drawDesk(c, tx, ty, w, seed) {
   const padCols = ['#3a4257', '#4a3a57', '#2f4a4a', '#5a3a3a'];
   const mugCols = ['#d94f4f', '#3b78e0', '#f2c14e', '#4fbf8a', '#f4f6fa'];
   for (let i = 0; i < w; i++) {
-    const ox = x + i * TILE, s = seed + i, v = i % 2;
+    const ox = x + i * TILE, s = seed + i, v = vs ? vs[i] : i % 2;
     const pad = padCols[Math.floor(hash(s, 7, 67) * 4)];
     const mc = mugCols[Math.floor(hash(s, 8, 68) * 5)];
     const pn = ['#ffe066', '#ff9ecb', '#8fe3a5'][Math.floor(hash(s, 9, 69) * 3)];
     if (v === 0) {
       keyboard(c, ox + 8, t + 4);
       mousePad(c, ox + 22, t + 3, pad);
-      drawMonitor(c, ox + 7, t + 10, s, true);
+      if (mon) drawMonitor(c, ox + 7, t + 10, s, true);
       // cabo do monitor até a beirada da frente
       line(c, ox + 16, t + 23, ox + 16, t + 26, '#12151c'); line(c, ox + 16, t + 26, ox + 20, t + 29, '#12151c');
       if (hash(s, 10, 70) > 0.4) mug(c, ox + 25, t + 17, mc); else papers(c, ox + 24, t + 17, s);
       postIt(c, ox + 2, t + 11, pn);
       papers(c, ox + 1, t + 17, s + 5);
     } else {
-      drawMonitor(c, ox + 7, t + 3, s, false);
+      if (mon) drawMonitor(c, ox + 7, t + 3, s, false);
       keyboard(c, ox + 8, t + 19);
       mousePad(c, ox + 22, t + 18, pad);
       if (hash(s, 10, 70) > 0.4) mug(c, ox + 26, t + 5, mc); else papers(c, ox + 24, t + 4, s);
@@ -715,12 +723,12 @@ function drawSofa(c, tx, ty, len, facing, col, H = 12) {
 }
 
 /** Vaso (chão): caixa de 10px com aro, prato, terra com pedrinhas; a copa vai no overlay. */
-function drawPlantBase(c, tx, ty) {
+function drawPlantBase(c, tx, ty, potCol) {
   const x = tx * TILE, y = ty * TILE, s = hash(tx, ty, 12);
   disc(c, x + 21, y + 25, 10, 'rgba(0,0,0,0.20)');    // sombra da folhagem no chão (baixo-direita)
   rect(c, x + 9, y + 28, 16, 3, 'rgba(0,0,0,0.25)');   // sombra do prato
   rect(c, x + 8, y + 27, 16, 2, '#5c3a22'); rect(c, x + 8, y + 27, 16, 1, '#8a5a38');   // prato
-  const pot = s > 0.5 ? '#a85a34' : '#9a6a4a';
+  const pot = potCol || (s > 0.5 ? '#a85a34' : '#9a6a4a');
   box(c, x + 9, y + 20, 14, 8, 10, pot, { top: shade(pot, 0.2) });
   rect(c, x + 8, y + 10, 16, 3, shade(pot, 0.12)); rect(c, x + 8, y + 10, 16, 1, shade(pot, 0.4)); rect(c, x + 23, y + 10, 1, 3, shade(pot, -0.2)); // aro
   rect(c, x + 10, y + 13, 12, 6, '#3a2618');           // terra no topo do vaso
@@ -730,7 +738,7 @@ function drawPlantBase(c, tx, ty) {
   for (let k = 0; k < 3; k++) rect(c, x + 12 + k * 4, y + 24, 2, 1, shade(pot, -0.18));    // textura de argila
   rect(c, x + 9, y + 26, 14, 2, '#7e4225');
 }
-function drawPlantTop(c, tx, ty) {
+function drawPlantTop(c, tx, ty, bloom) {
   const x = tx * TILE, y = ty * TILE, s = hash(tx, ty, 11);
   disc(c, x + 18, y + 14, 10, 'rgba(0,0,0,0.16)');    // sombra interna sob a copa
   disc(c, x + 16, y + 11, 10, '#1a5c30');              // volume mais escuro embaixo/direita
@@ -751,7 +759,35 @@ function drawPlantTop(c, tx, ty) {
   }
   for (let i = 0; i < 9; i++) rect(c, x + 5 + Math.floor(hash(i, tx, ty) * 22), y - 3 + Math.floor(hash(ty, i, tx) * 22), 2, 1, '#8fe89c');
   for (let i = 0; i < 6; i++) rect(c, x + 8 + Math.floor(hash(i, ty, 13) * 16), y + 8 + Math.floor(hash(i, tx, 14) * 8), 2, 1, '#14481f'); // recortes de sombra
-  if (s > 0.55) { rect(c, x + 20, y + 4, 2, 2, '#f4a1c8'); rect(c, x + 9, y + 12, 2, 2, '#ffd58a'); rect(c, x + 20, y + 4, 1, 1, '#fff'); }
+  if (bloom) for (let i = 0; i < 6; i++) { const fx = x + 7 + Math.floor(hash(i, tx, 240) * 18), fy = y + 1 + Math.floor(hash(i, ty, 241) * 14); rect(c, fx, fy, 3, 3, bloom); rect(c, fx, fy, 3, 1, shade(bloom, 0.4)); rect(c, fx + 1, fy + 1, 1, 1, '#ffe08a'); }
+  else if (s > 0.55) { rect(c, x + 20, y + 4, 2, 2, '#f4a1c8'); rect(c, x + 9, y + 12, 2, 2, '#ffd58a'); rect(c, x + 20, y + 4, 1, 1, '#fff'); }
+}
+
+/** Cacto em vaso (só piso, sem copa no overlay). O vaso leva a cor do time. */
+function drawCactus(c, tx, ty, col) {
+  const x = tx * TILE, y = ty * TILE;
+  ell(c, x + 19, y + 27, 9, 3, 'rgba(0,0,0,0.25)');
+  box(c, x + 10, y + 20, 12, 8, 8, col, { top: shade(col, 0.2) });
+  rect(c, x + 11, y + 12, 10, 3, '#3a2618');
+  const g = '#3c8a4c', gl = '#5fb46e', gd = '#256a38';
+  rect(c, x + 13, y + 1, 6, 12, g); rect(c, x + 13, y + 1, 2, 12, gl); rect(c, x + 18, y + 1, 1, 12, gd); rect(c, x + 14, y, 4, 1, gl);
+  rect(c, x + 8, y + 5, 5, 3, g); rect(c, x + 8, y + 2, 3, 4, g); rect(c, x + 8, y + 2, 1, 4, gl); rect(c, x + 8, y + 5, 5, 1, gl);
+  rect(c, x + 19, y + 7, 5, 3, g); rect(c, x + 22, y + 4, 3, 4, g); rect(c, x + 22, y + 4, 1, 4, gl); rect(c, x + 19, y + 7, 5, 1, gl);
+  for (const [px, py] of [[15, 3], [16, 7], [15, 10], [9, 3], [23, 5]]) rect(c, x + px, y + py, 1, 1, '#e8f5c8');
+  rect(c, x + 15, y - 1, 2, 1, '#f4a1c8');
+}
+/** Palmeira (overlay): folhas longas arqueadas saindo do vaso. */
+function drawPalmTop(c, tx, ty) {
+  const x = tx * TILE, y = ty * TILE, cx = x + 16, cy = y + 10;
+  disc(c, cx + 3, cy + 5, 10, 'rgba(0,0,0,0.14)');
+  for (let i = 0; i < 9; i++) {
+    const a = -Math.PI + 0.25 + i * (Math.PI - 0.5) / 8, len = 13 + Math.floor(hash(i, tx, 242) * 4);
+    const mx = Math.round(cx + Math.cos(a) * len * 0.7), my = Math.round(cy + Math.sin(a) * len * 0.8 - 2);
+    const ex = Math.round(cx + Math.cos(a) * len), ey = Math.round(cy + Math.sin(a) * len * 0.5 + 3);
+    line(c, cx, cy, mx, my, i % 2 ? '#2d8a48' : '#3aa257'); line(c, mx, my, ex, ey, i % 2 ? '#256a38' : '#2d8a48');
+    line(c, cx, cy - 1, mx, my - 1, '#7fe090'); rect(c, mx, my, 2, 2, '#8fe89c');
+  }
+  disc(c, cx, cy, 3, '#256a38'); rect(c, cx - 1, cy - 2, 2, 1, '#8fe89c');
 }
 
 /**
@@ -1506,6 +1542,361 @@ function drawFloorPit(c, tx, ty) {
 }
 
 // ---------------------------------------------------------------------------
+// Repaginação: pisos neutros + objetos com a cor do time (helpers novos)
+// ---------------------------------------------------------------------------
+// PALETA (decisão de arte): o piso de cada sala é NEUTRO e de valor médio/claro
+// (grafite, cinza-concreto, bege, carvalho, café-com-leite) para o personagem —
+// que é escuro e saturado — se destacar. A cor do time (Zone.color) aparece só em
+// OBJETOS: tapete de acento (dessaturado), cadeiras, quadros, luminárias, plantas
+// e na parede de fundo (tinta 30% da cor). Para calibrar: FLOORS (piso), accentRug()
+// (força do tapete), chairCols() (tom das cadeiras) e o 0.30 em wallPaint().
+
+/** Mistura duas cores '#rrggbb' (t=0 -> a, t=1 -> b). */
+function mix(a, b, t) {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const ch = (s) => Math.round(((pa >> s) & 255) * (1 - t) + ((pb >> s) & 255) * t);
+  return '#' + [16, 8, 0].map((s) => ch(s).toString(16).padStart(2, '0')).join('');
+}
+
+/** Tinta da face da parede: base azul-noite puxada 30% para a cor do time. */
+function wallPaint(zone) { return mix('#293049', zone.color, 0.30); }
+
+/** Tapete de acento: cor do time dessaturada (misturada a um cinza) e escurecida. */
+function accentRug(z, k = 0.55) {
+  const base = shade(mix(z.color, '#666a72', k), -0.16);
+  return [base, shade(base, -0.38)];
+}
+/** Duas variações de cadeira na cor do time (escuras, para o avatar aparecer). */
+function chairCols(z) { return [shade(z.color, -0.22), shade(z.color, -0.36)]; }
+
+/** Piso vinílico/concreto polido: placas de 32px com junta, salpicos e brilho suave. */
+function drawVinylTile(c, tx, ty, col) {
+  const x = tx * TILE, y = ty * TILE;
+  const v = hash(tx, ty, 201);
+  rect(c, x, y, TILE, TILE, v > 0.66 ? shade(col, 0.03) : v < 0.25 ? shade(col, -0.03) : col);
+  for (let i = 0; i < 26; i++) {
+    rect(c, x + Math.floor(hash(tx * 31 + i, ty, 202) * 31), y + Math.floor(hash(tx, ty * 31 + i, 203) * 31), 1, 1,
+      hash(i, tx + ty, 204) > 0.5 ? shade(col, 0.09) : shade(col, -0.09));
+  }
+  if (hash(tx, ty, 205) > 0.7) for (let k = 0; k < 8; k++) rect(c, x + 6 + k * 3, y + 22 - k * 2, 3, 1, 'rgba(255,255,255,0.05)');
+  rect(c, x, y, TILE, 1, 'rgba(0,0,0,0.20)'); rect(c, x, y, 1, TILE, 'rgba(0,0,0,0.20)');            // junta
+  rect(c, x + 1, y + 1, TILE - 1, 1, 'rgba(255,255,255,0.07)'); rect(c, x + 1, y + 1, 1, TILE - 1, 'rgba(255,255,255,0.05)');
+}
+
+/** Rótulo de área na parede de fundo: quadro pequeno com arte abstrata na cor do time. */
+function drawPicture(c, tx, ty, col, seed) {
+  const x = tx * TILE + 3, y = ty * TILE - 20 + 3, W = 26, H = 14;
+  rect(c, x + 2, y + 2, W, H, 'rgba(0,0,0,0.30)');
+  rect(c, x, y, W, H, '#2a2f3b'); rect(c, x, y, W, 1, '#5b647a'); rect(c, x, y, 1, H, '#4a5163');
+  rect(c, x + 2, y + 2, W - 4, H - 4, mix(col, '#ffffff', 0.78));
+  const s = hash(seed, 1, 210);
+  if (s < 0.5) {                                                        // sol + montanhas
+    disc(c, x + 8, y + 6, 2, mix(col, '#ffffff', 0.25));
+    for (let i = 0; i < 8; i++) rect(c, x + 3 + i * 2, y + 10 - Math.min(i, 7 - i), 2, 2 + Math.min(i, 7 - i), col);
+    rect(c, x + 2, y + 11, W - 4, 1, shade(col, -0.3));
+  } else {                                                              // faixas geométricas
+    rect(c, x + 3, y + 3, 8, 8, col); rect(c, x + 12, y + 5, 5, 6, shade(col, -0.35)); rect(c, x + 18, y + 3, 5, 8, mix(col, '#ffffff', 0.4));
+  }
+  rect(c, x + 2, y + 2, W - 4, 1, 'rgba(255,255,255,0.5)');
+}
+
+/** Relógio de parede (mostrador estático; os ponteiros são animados em renderProps). */
+function drawClockFace(c, tx, ty) {
+  const cx = tx * TILE + 16, cy = ty * TILE - 20 + 9;
+  disc(c, cx + 2, cy + 2, 8, 'rgba(0,0,0,0.30)');
+  disc(c, cx, cy, 8, '#2a2f3b'); disc(c, cx, cy, 7, '#f4f6fa');
+  rect(c, cx - 4, cy - 6, 4, 1, '#ffffff');
+  for (const [dx, dy] of [[0, -6], [6, 0], [0, 6], [-6, 0]]) rect(c, cx + dx, cy + dy, 1, 1, '#3a4150');
+  for (const [dx, dy] of [[4, -4], [4, 4], [-4, 4], [-4, -4]]) rect(c, cx + dx, cy + dy, 1, 1, '#9aa3b5');
+  rect(c, cx, cy, 1, 1, '#1a1f2b');
+}
+
+/** Quadro kanban na parede: 4 colunas (backlog/doing/review/done) com cartões coloridos. */
+function drawKanban(c, tx, ty, w) {
+  const x = tx * TILE, W = w * TILE, y = ty * TILE - 20;
+  rect(c, x + 4, y + 2, W - 4, 18, 'rgba(0,0,0,0.30)');
+  rect(c, x + 2, y, W - 4, 18, '#5d6678');
+  rect(c, x + 2, y, W - 4, 1, '#a0a9ba'); rect(c, x + 2, y, 1, 18, '#8d97a8');
+  rect(c, x + W - 3, y, 1, 18, '#3a4150'); rect(c, x + 2, y + 17, W - 4, 1, '#3a4150');
+  rect(c, x + 4, y + 2, W - 8, 14, '#f4f6fa');
+  const heads = ['#8a93a5', '#3b78e0', '#e0b04a', '#2fa37c'];
+  const cw = Math.floor((W - 8) / 4);
+  for (let i = 0; i < 4; i++) {
+    const cx = x + 4 + i * cw;
+    rect(c, cx, y + 2, cw - 1, 3, heads[i]); rect(c, cx, y + 2, cw - 1, 1, shade(heads[i], 0.3));
+    if (i) rect(c, cx - 1, y + 5, 1, 11, '#c9d0dc');
+    const n = 1 + Math.floor(hash(tx, i, 211) * 3);
+    for (let k = 0; k < n; k++) {
+      const pc = ['#ffe066', '#ff9ecb', '#8fe3a5', '#9fd0ff'][Math.floor(hash(i, k + tx, 212) * 4)];
+      rect(c, cx + 3 + (k % 2) * 3, y + 6 + k * 3, 7, 2, pc);
+      rect(c, cx + 3 + (k % 2) * 3, y + 6 + k * 3, 7, 1, shade(pc, 0.3));
+    }
+  }
+  for (let k = 0; k < 4; k++) rect(c, x + 6 + k * 2, y + 14 - k * 2, 2, 1, 'rgba(255,255,255,0.30)');
+  rect(c, x + 8, y + 20, W - 16, 3, '#6d7688'); rect(c, x + 8, y + 20, W - 16, 1, '#a0a9ba');
+  rect(c, x + 8, y + 23, W - 16, 2, 'rgba(0,0,0,0.22)');
+}
+
+/** Painel de pipeline de deploy na parede (o preenchimento da barra é animado em renderProps). */
+function drawPipelineBoard(c, tx, ty, w) {
+  const x = tx * TILE, W = w * TILE, y = ty * TILE - 20;
+  rect(c, x + 4, y + 2, W - 4, 18, 'rgba(0,0,0,0.32)');
+  rect(c, x + 2, y, W - 4, 18, '#0e1119');
+  rect(c, x + 2, y, W - 4, 1, '#2a3040'); rect(c, x + 2, y, 1, 18, '#232939');
+  rect(c, x + 4, y + 2, W - 8, 14, '#0f1a2b');
+  const n = 5, bw = 18, gap = Math.floor((W - 16 - n * bw) / (n - 1));
+  for (let i = 0; i < n; i++) {
+    const bx = x + 8 + i * (bw + gap);
+    const st = i < 3 ? DASH.green : i === 3 ? DASH.amber : DASH.dim;
+    rect(c, bx, y + 4, bw, 6, shade(st, -0.55)); rect(c, bx, y + 4, bw, 1, st); rect(c, bx, y + 9, bw, 1, shade(st, -0.3));
+    rect(c, bx + 2, y + 6, 6, 2, st);
+    if (i < n - 1) rect(c, bx + bw, y + 7, gap, 1, '#3a5a80');
+  }
+  rect(c, x + 8, y + 12, W - 16, 3, '#1a2436'); rect(c, x + 8, y + 12, Math.round((W - 16) * 0.6), 3, DASH.green);
+  for (let k = 0; k < 6; k++) rect(c, x + 6 + k * 2, y + 14 - k * 2, 3, 1, 'rgba(255,255,255,0.10)');
+  rect(c, x + W / 2 - 6, y + 18, 12, 2, '#20242f');
+}
+
+/** Vitrine de troféus (w tiles), altura 18: madeira escura, vidro, taças, medalhas. */
+function drawTrophyShelf(c, tx, ty, w) {
+  const x = tx * TILE, W = w * TILE, H = 18;
+  const y0 = ty * TILE + 16, D = 14;
+  box(c, x, y0, W, D, H, '#3d2a1c', { top: '#5e3f28' });
+  const fy = y0 + D - H;
+  rect(c, x + 2, fy + 2, W - 4, 15, '#171019');
+  fade(c, x + 2, fy + 2, W - 4, 5, 'down', 0.4);
+  rect(c, x + 2, fy + 9, W - 4, 1, '#7a5233');
+  for (let i = 0; i < w * 3; i++) {
+    const bx = x + 5 + i * 10, row = i % 2, base = fy + (row ? 16 : 8);
+    if (bx > x + W - 12) break;
+    const k = Math.floor(hash(tx + i, ty, 213) * 3);
+    if (k === 0) {                                                       // taça
+      rect(c, bx + 1, base, 6, 1, '#7a5a20'); rect(c, bx + 3, base - 3, 2, 3, '#c9a13a');
+      rect(c, bx, base - 7, 8, 4, '#f0c94a'); rect(c, bx, base - 7, 8, 1, '#fff2a8'); rect(c, bx + 7, base - 7, 1, 4, '#b8952a');
+      rect(c, bx - 1, base - 6, 1, 2, '#c9a13a'); rect(c, bx + 8, base - 6, 1, 2, '#c9a13a');
+    } else if (k === 1) {                                                // medalha em suporte
+      rect(c, bx + 2, base - 1, 4, 1, '#7a5a20'); rect(c, bx + 3, base - 5, 2, 4, '#5a6478');
+      disc(c, bx + 4, base - 6, 2, '#e0b04a'); rect(c, bx + 3, base - 7, 1, 1, '#fff2a8');
+    } else {                                                             // placa
+      rect(c, bx, base - 6, 8, 6, '#c8a67c'); rect(c, bx, base - 6, 8, 1, '#e2c89c');
+      rect(c, bx + 1, base - 4, 6, 1, '#5a3d24'); rect(c, bx + 1, base - 2, 4, 1, '#5a3d24');
+    }
+  }
+  for (let k = 0; k < 7; k++) rect(c, x + 5 + k * 3, fy + 14 - k * 2, 2, 1, 'rgba(255,255,255,0.10)');    // reflexo do vidro
+  rect(c, x + 2, fy + 17, W - 4, 1, '#1a0f07');
+  rect(c, x + 2, fy + 2, 1, 15, '#6a4428'); rect(c, x + W - 3, fy + 2, 1, 15, '#2a1a10');
+}
+
+/** Estante de suprimentos (w tiles): caixas, galões e frascos coloridos em prateleiras de metal. */
+function drawSupplyShelf(c, tx, ty, w, accent) {
+  const x = tx * TILE, W = w * TILE, H = 18;
+  const y0 = ty * TILE + 16, D = 14;
+  box(c, x, y0, W, D, H, '#586178', { top: '#8a93a5' });
+  const fy = y0 + D - H;
+  rect(c, x + 2, fy + 2, W - 4, 15, '#20242f');
+  fade(c, x + 2, fy + 2, W - 4, 4, 'down', 0.35);
+  rect(c, x + 2, fy + 9, W - 4, 1, '#8a93a5'); rect(c, x + 2, fy + 16, W - 4, 1, '#8a93a5');
+  const pal = [accent, '#e0b04a', '#f4f6fa', '#3b78e0', '#d9534f', '#63cf7c'];
+  for (let row = 0; row < 2; row++) {
+    const base = fy + (row ? 16 : 9);
+    let bx = x + 3;
+    while (bx < x + W - 8) {
+      const k = Math.floor(hash(bx, row + ty, 214) * 3), col = pal[Math.floor(hash(bx, row, 215) * pal.length)];
+      if (k === 0) { rect(c, bx, base - 6, 8, 6, '#b98a58'); rect(c, bx, base - 6, 8, 1, '#e2c89c'); rect(c, bx + 3, base - 6, 2, 6, col); bx += 10; }   // caixa
+      else if (k === 1) { rect(c, bx, base - 6, 4, 6, col); rect(c, bx, base - 6, 4, 1, shade(col, 0.35)); rect(c, bx + 1, base - 8, 2, 2, '#3a4150'); bx += 6; } // frasco
+      else { rect(c, bx, base - 5, 7, 5, col); rect(c, bx, base - 5, 7, 1, shade(col, 0.35)); rect(c, bx, base - 3, 7, 1, shade(col, -0.25)); bx += 9; }        // rolo/pacote
+    }
+  }
+  rect(c, x + 2, fy + 2, 1, 15, '#a0a9ba'); rect(c, x + W - 3, fy + 2, 1, 15, '#2a303d');
+}
+
+/** Bicicleta encostada na parede (vista lateral, 1 tile), quadro na cor do time. */
+function drawBike(c, tx, ty, col) {
+  const x = tx * TILE, y = ty * TILE;
+  ell(c, x + 18, y + 29, 14, 3, 'rgba(0,0,0,0.25)');
+  const ring = (cx, cy, r) => {
+    for (let a = 0; a < 6.28; a += 0.22) rect(c, cx + Math.round(Math.cos(a) * r), cy + Math.round(Math.sin(a) * r), 1, 1, '#14171f');
+    rect(c, cx - r, cy, r * 2 + 1, 1, '#586178'); rect(c, cx, cy - r, 1, r * 2 + 1, '#586178');
+    rect(c, cx - 1, cy - 1, 3, 3, '#8a93a5');
+  };
+  ring(x + 7, y + 23, 6); ring(x + 26, y + 23, 6);
+  const dk = shade(col, -0.25);
+  line(c, x + 7, y + 23, x + 15, y + 23, dk); line(c, x + 15, y + 23, x + 12, y + 13, col);
+  line(c, x + 12, y + 13, x + 7, y + 23, dk); line(c, x + 12, y + 13, x + 23, y + 13, col);
+  line(c, x + 15, y + 23, x + 23, y + 13, dk); line(c, x + 23, y + 13, x + 26, y + 23, dk);
+  rect(c, x + 9, y + 11, 6, 2, '#20242f'); rect(c, x + 9, y + 11, 6, 1, '#586178');       // selim
+  rect(c, x + 22, y + 10, 4, 2, '#20242f'); rect(c, x + 23, y + 11, 1, 3, '#586178');     // guidão
+  rect(c, x + 14, y + 24, 3, 2, '#8a93a5');                                               // pedal
+}
+
+/** Caixas de encomenda empilhadas (1 tile) com fita na cor do time e etiqueta. */
+function drawCrates(c, tx, ty, col) {
+  const x = tx * TILE, y = ty * TILE;
+  box(c, x + 3, y + 14, 26, 16, 12, '#b98a58', { top: '#d2a56f' });
+  const t = y + 14 - 12;
+  rect(c, x + 14, t, 4, 16, col); rect(c, x + 14, y + 30 - 12, 4, 12, shade(col, -0.2));
+  rect(c, x + 5, y + 21, 7, 5, '#f4f0e0'); rect(c, x + 6, y + 23, 5, 1, '#9aa3b5');
+  rect(c, x + 8, t + 2, 8, 6, '#c99a64'); rect(c, x + 8, t + 2, 8, 1, '#e2c89c');           // caixinha em cima
+  rect(c, x + 20, t + 3, 6, 5, '#a9793f'); rect(c, x + 20, t + 3, 6, 1, '#d2a56f');
+}
+
+/** Carrinho de limpeza: estrutura amarela, balde, esfregão e sacos. */
+function drawCleanCart(c, tx, ty, col) {
+  const x = tx * TILE, y = ty * TILE;
+  box(c, x + 4, y + 14, 24, 14, 12, '#c9b23a', { top: '#e6d160' });
+  const t = y + 14 - 12;
+  for (const cx of [x + 6, x + 22]) { rect(c, cx, y + 28, 3, 3, '#12151c'); rect(c, cx, y + 28, 1, 1, '#586178'); }
+  rect(c, x + 6, t + 3, 9, 8, 'rgba(0,0,0,0.22)');
+  rect(c, x + 5, t + 2, 9, 8, col); rect(c, x + 5, t + 2, 9, 1, shade(col, 0.35)); rect(c, x + 13, t + 2, 1, 8, shade(col, -0.3));   // balde
+  rect(c, x + 6, t + 4, 7, 4, shade(col, -0.35));
+  rect(c, x + 17, t + 4, 8, 6, '#f4f6fa'); rect(c, x + 17, t + 4, 8, 1, '#ffffff'); rect(c, x + 19, t + 6, 4, 1, '#9aa3b5');       // pacote/panos
+  line(c, x + 24, t + 1, x + 27, t - 7, '#8a5a34'); rect(c, x + 25, t - 9, 4, 3, '#d8d0c0');                                        // esfregão
+}
+
+/** Pufe redondo (assento, 1 tile). */
+function drawPouf(c, tx, ty, col) {
+  const cx = tx * TILE + 16, cy = ty * TILE + 18;
+  ell(c, cx + 3, cy + 5, 11, 6, 'rgba(0,0,0,0.25)');
+  ell(c, cx, cy + 2, 11, 8, shade(col, -0.35));
+  ell(c, cx, cy, 11, 8, col);
+  ell(c, cx - 1, cy - 1, 8, 5, shade(col, 0.14));
+  rect(c, cx - 6, cy - 6, 8, 1, shade(col, 0.4));
+  rect(c, cx - 1, cy - 1, 2, 2, shade(col, -0.3));
+}
+
+/** Luminária de piso (1 tile): base, haste e cúpula na cor do time. */
+function drawFloorLamp(c, tx, ty, col) {
+  const x = tx * TILE, y = ty * TILE;
+  ell(c, x + 19, y + 28, 8, 3, 'rgba(0,0,0,0.25)');
+  ell(c, x + 16, y + 27, 6, 2, '#20242f'); rect(c, x + 12, y + 26, 5, 1, '#586178');
+  rect(c, x + 15, y + 8, 2, 19, '#2a2f3b'); rect(c, x + 15, y + 8, 1, 19, '#586178');
+  rect(c, x + 9, y + 2, 14, 8, shade(col, -0.15)); rect(c, x + 10, y + 1, 12, 1, shade(col, 0.2));
+  rect(c, x + 9, y + 2, 14, 1, shade(col, 0.3)); rect(c, x + 9, y + 2, 2, 8, shade(col, 0.1)); rect(c, x + 21, y + 2, 2, 8, shade(col, -0.4));
+  rect(c, x + 10, y + 10, 12, 2, '#ffe9b0'); rect(c, x + 12, y + 10, 8, 1, '#ffffff');    // boca acesa
+}
+
+/** Bebedouro (1 tile), altura 16. */
+function drawWaterCooler(c, tx, ty) {
+  const x = tx * TILE, y = ty * TILE;
+  box(c, x + 9, y + 16, 14, 14, 14, '#dfe5ee', { top: '#eef2f8' });
+  const t = y + 16 - 14;
+  disc(c, x + 16, t - 2, 5, 'rgba(0,0,0,0.20)');
+  disc(c, x + 16, t - 3, 5, '#7fc4f0'); disc(c, x + 15, t - 4, 3, '#b8e2fa'); rect(c, x + 14, t - 8, 4, 2, '#dfe5ee');
+  rect(c, x + 11, y + 22, 10, 2, '#3a4150'); rect(c, x + 12, y + 22, 3, 2, '#3b78e0'); rect(c, x + 17, y + 22, 3, 2, '#d9534f');
+  rect(c, x + 13, y + 26, 6, 1, '#8a93a5');
+}
+
+/** Máquina de venda (1x2 tiles), altura 18, corpo na cor de acento e vitrine de produtos. */
+function drawVending(c, tx, ty, col) {
+  const x = tx * TILE, y = ty * TILE, H = 18;
+  box(c, x + 2, y + 18, 28, 44, H, col, { top: shade(col, 0.22) });
+  rect(c, x + 3, y + 1, 26, 1, shade(col, 0.5));
+  fade(c, x + 3, y + 20, 26, 22, 'up', 0.12);
+  for (let k = 0; k < 4; k++) rect(c, x + 8 + k * 5, y + 5, 3, 1, shade(col, -0.35));
+  // frente em [y+44, y+62]
+  rect(c, x + 4, y + 46, 17, 14, '#10141c'); rect(c, x + 4, y + 46, 17, 1, '#000000');
+  const pc = ['#d9534f', '#e0b04a', '#3b78e0', '#63cf7c', '#f4f6fa'];
+  for (let r = 0; r < 3; r++) for (let k = 0; k < 4; k++) {
+    const p = pc[Math.floor(hash(k, r + ty, 216) * pc.length)];
+    rect(c, x + 5 + k * 4, y + 47 + r * 4, 3, 3, p); rect(c, x + 5 + k * 4, y + 47 + r * 4, 3, 1, shade(p, 0.35));
+  }
+  for (let k = 0; k < 5; k++) rect(c, x + 6 + k * 2, y + 58 - k * 2, 2, 1, 'rgba(255,255,255,0.14)');
+  rect(c, x + 23, y + 47, 5, 8, '#20242f'); rect(c, x + 24, y + 48, 3, 2, '#4ade80'); rect(c, x + 24, y + 51, 3, 1, '#8a93a5'); rect(c, x + 24, y + 53, 3, 1, '#8a93a5');
+  rect(c, x + 5, y + 61, 16, 1, '#05070b'); rect(c, x + 4, y + 62, 4, 2, '#20242f'); rect(c, x + 24, y + 62, 4, 2, '#20242f');
+}
+
+/** Mesa de pingue-pongue (w x h tiles), altura 8: tampo azul, linhas, rede e raquetes. */
+function drawPingPong(c, tx, ty, w, h) {
+  const x = tx * TILE, y = ty * TILE, W = w * TILE, H = h * TILE, HT = 8;
+  box(c, x + 2, y + 6, W - 4, H - 10, HT, '#20304a', { top: '#2f6fb0' });
+  const t = y + 6 - HT, D = H - 10;
+  fade(c, x + 3, t + 2, W - 6, D - 2, 'up', 0.10);
+  rect(c, x + 4, t + 2, W - 8, 1, '#f4f6fa'); rect(c, x + 4, t + D - 2, W - 8, 1, '#f4f6fa');
+  rect(c, x + 4, t + 2, 1, D - 3, '#f4f6fa'); rect(c, x + W - 5, t + 2, 1, D - 3, '#f4f6fa');
+  rect(c, x + 4, t + D / 2, W - 8, 1, 'rgba(244,246,250,0.6)');
+  rect(c, x + W / 2 - 1, t - 3, 2, D + 3, 'rgba(230,236,245,0.85)');                     // rede
+  for (let k = 0; k < D; k += 2) rect(c, x + W / 2 - 1, t - 3 + k, 1, 1, '#20242f');
+  rect(c, x + W / 2 - 2, t - 3, 4, 1, '#f4f6fa');
+  rect(c, x + 8, t + 6, 3, 3, '#d9534f'); rect(c, x + 8, t + 8, 1, 3, '#8a5a34');       // raquete
+  rect(c, x + W - 12, t + D - 9, 3, 3, '#111111'); rect(c, x + W - 10, t + D - 8, 1, 3, '#8a5a34');
+  rect(c, x + W / 2 + 10, t + 7, 2, 2, '#ffe9b0');                                       // bolinha
+  const fy = y + 6 + D - HT;
+  for (const lx of [x + 2, x + W - 6]) { rect(c, lx, fy + 2, 4, 6, '#14171f'); rect(c, lx, fy + 2, 1, 6, '#586178'); }
+}
+
+/** Tapete-passadeira do corredor: listras e borda com faixa de cor, 20px de altura. */
+function drawRunner(c, x, y, len, col) {
+  const H = 20, base = shade(col, -0.10), trim = shade(col, -0.45);
+  rect(c, x, y, len, H, trim); rect(c, x + 2, y + 2, len - 4, H - 4, base);
+  rect(c, x + 2, y + 2, len - 4, 1, shade(base, 0.2));
+  for (let i = 8; i < len - 8; i += 16) {
+    for (let d = -3; d <= 3; d++) rect(c, x + i + 3 - Math.abs(d), y + 10 + d, (3 - Math.abs(d)) * 2 + 1, 1, (i / 16) % 2 ? shade(base, 0.16) : shade(base, -0.14));
+  }
+  for (let i = 0; i < len; i += 4) { rect(c, x + i, y - 1, 2, 1, trim); rect(c, x + i, y + H, 2, 1, trim); }
+  rect(c, x + 2, y + H, len, 2, 'rgba(0,0,0,0.18)');
+}
+
+/** Monitor ultralargo compartilhado (pair programming), sobre a mesa. x,y = canto do corpo. */
+function drawWideMonitor(c, x, y, seed) {
+  const W = 38, H = 13;
+  rect(c, x + 3, y + 3, W, H, 'rgba(0,0,0,0.20)');
+  rect(c, x + W / 2 - 4, y + H, 8, 2, '#4a5163'); rect(c, x + W / 2 - 4, y + H, 8, 1, '#8a93a5');
+  rect(c, x, y, W, H, '#141821'); rect(c, x, y, W, 1, '#38405a'); rect(c, x, y, 1, H, '#2b3245');
+  rect(c, x + W - 1, y, 1, H, '#0a0c12'); rect(c, x, y + H - 1, W, 1, '#0a0c12');
+  rect(c, x + 1, y + 1, W - 2, H - 3, '#1d2740');
+  rect(c, x + 1, y + 1, W - 2, 2, '#2c3c5e');
+  rect(c, x + W / 2, y + 3, 1, H - 6, '#0b1020');                                  // divisória das duas janelas
+  const pal = ['#a9d6ff', '#8ff0b8', '#ffd58a', '#f4a1c8', '#c3a6ff'];
+  for (let i = 0; i < 4; i++) {
+    const l1 = 3 + Math.floor(hash(seed, i, 220) * 10), l2 = 3 + Math.floor(hash(seed, i, 221) * 10);
+    rect(c, x + 3, y + 4 + i * 2, l1, 1, pal[Math.floor(hash(seed, i, 222) * 5)]);
+    rect(c, x + W / 2 + 3, y + 4 + i * 2, l2, 1, pal[Math.floor(hash(seed, i, 223) * 5)]);
+  }
+  rect(c, x + W - 2, y + H - 2, 1, 1, '#4ade80');
+  for (let k = 0; k < 6; k++) rect(c, x + 14 + k, y + 9 - k, 2, 1, 'rgba(255,255,255,0.13)');
+}
+
+// ---------------------------------------------------------------------------
+// Props animados (dados puros — montados na inicialização, desenhados em renderProps)
+// ---------------------------------------------------------------------------
+// Cada prop é só posição + fase. renderProps repinta por cima do piso já cacheado
+// (que é redesenhado inteiro todo frame), então nunca é preciso "apagar" nada.
+const blinks = [];   // {x,y,w,h,on,off,per,ph,duty}: pisca entre duas cores (off=null: não desenha)
+const steams = [];   // {x,y,ph}: vapor de xícara
+const clocks = [];   // {cx,cy}: ponteiros de relógio de parede
+const progs = [];    // {x,y,w,h}: barra de progresso do pipeline
+const tvs = [];      // {x,y,w}: barras animadas da TV do lounge
+
+function addBlink(x, y, w, h, on, off, per, ph, duty) { blinks.push({ x, y, w, h, on, off, per, ph, duty }); }
+function addSteam(x, y) { steams.push({ x, y, ph: hash(x, y, 230) }); }
+
+/** Espelha as posições de drawDesk (cursor do monitor e vapor da caneca) para uma mesa. */
+function addDeskProps(tx, ty, w, seed, vs, monitors) {
+  const t = ty * TILE - 10;
+  for (let i = 0; i < w; i++) {
+    const ox = (tx + i) * TILE, s = seed + i, v = vs[i], ph = hash(s, ty, 231);
+    if (monitors) {
+      const sx = ox + 8, sy = t + (v === 0 ? 11 : 4), kind = Math.floor(hash(s, 1, 50) * 3);
+      if (kind === 0) {                                             // código: cursor no fim da última linha
+        const ind = Math.floor(hash(s, 3, 51) * 3) * 2, len = 3 + Math.floor(hash(s, 3, 4) * 8);
+        addBlink(Math.min(sx + 3 + ind + Math.min(len, 12 - ind), sx + 15), sy + 9, 1, 1, '#ffffff', null, 1060, ph, 0.55);
+      } else if (kind === 2) addBlink(sx + 7, sy + 8, 2, 1, '#b8ffcf', '#0e1a15', 1060, ph, 0.55);   // terminal
+    }
+    if (hash(s, 10, 70) > 0.4) addSteam(ox + (v === 0 ? 25 : 26) + 2, t + (v === 0 ? 17 : 5));
+  }
+}
+
+/** LEDs de um rack que piscam (posições espelham drawRack). */
+function addRackBlinks(tx, ty, type) {
+  const sx = tx * TILE + 4, fy = ty * TILE + 6;
+  const led = (x, y, col, off) => addBlink(x, y, 1, 1, col, off, 260 + Math.floor(hash(x, y, 232) * 1100), hash(x, y, 233), 0.6 + hash(x, y, 234) * 0.3);
+  if (type === 'ups') { for (let k = 0; k < 3; k++) led(sx + 13 + k * 3, fy + 19, k === 2 ? '#ffb43a' : '#5cff8a', '#26324a'); return; }
+  if (type === 'srv') { for (let j = 0; j < 3; j++) led(sx + 19, fy + 11 + j * 4, ledCol(tx, ty, j, 0), '#141822'); return; }
+  if (type === 'net') { for (let k = 0; k < 8; k += 2) if (hash(k, tx + ty, 184) > 0.3) led(sx + k * 3, fy + 10, '#5cff8a', '#26324a'); return; }
+  for (let j = 0; j < 3; j++) { const k = j * 2; if (hash(k, tx * 5 + j, 189) > 0.3) led(sx + k * 4 + 2, fy + 10 + j * 4 + 1, '#58b4ff', '#26324a'); }
+}
+
+// ---------------------------------------------------------------------------
 // Montagem das salas (posiciona móveis, bloqueios, assentos e luzes)
 // ---------------------------------------------------------------------------
 
@@ -1514,13 +1905,22 @@ function drawFloorPit(c, tx, ty) {
 // altos de uma peça cobrem corretamente o que está atrás.
 function pushFurn(k, fn) { furnOps.push({ k, fn }); }
 
-function placePlant(tx, ty) {
+/**
+ * Planta. kind: 'fern' (padrão), 'flower' (flores na cor `accent`), 'cactus'
+ * (só piso, sem copa) ou 'palm' (vaso claro + folhas longas). Variar as plantas
+ * por sala também ajuda a dar identidade.
+ */
+function placePlant(tx, ty, kind = 'fern', accent = '#f4a1c8') {
   blockRect(tx, ty, 1, 1);
-  pushFurn((ty + 1) * TILE, (c) => drawPlantBase(c, tx, ty));
-  overlayOps.push((c) => drawPlantTop(c, tx, ty));
+  if (kind === 'cactus') { pushFurn((ty + 1) * TILE, (c) => drawCactus(c, tx, ty, accent)); return; }
+  pushFurn((ty + 1) * TILE, (c) => drawPlantBase(c, tx, ty, kind === 'palm' ? '#d9d4c7' : undefined));
+  if (kind === 'palm') overlayOps.push((c) => drawPalmTop(c, tx, ty));
+  else overlayOps.push((c) => drawPlantTop(c, tx, ty, kind === 'flower' ? accent : null));
 }
 /** key: sobrescreve a ordem (ex.: itens de parede desenham antes de tudo). */
 function placeDecor(tx, ty, w, h, fn, key) { blockRect(tx, ty, w, h); pushFurn(key != null ? key : (ty + h) * TILE, fn); }
+/** Item de parede (quadro, relógio): não bloqueia o piso, desenha antes de tudo. */
+function wallItem(fn) { pushFurn(0, fn); }
 // Cor de cada cadeira, para a camada da frente desenhar igual à de trás.
 const chairColors = new Map();
 
@@ -1542,61 +1942,176 @@ export function drawSeatFront(c, seat) {
   drawChair(c, seat.tx, seat.ty, seat.facing, col, 'front');
 }
 
-const LAMP = '#ffd9a0', SCREEN = '#7fb4ff', WINDOW = '#bcd8ff';
+const LAMP = '#ffd39a', SCREEN = '#7fb4ff', WINDOW = '#bcd8ff';   // luz de lâmpada mais quente: o piso agora é neutro
 
-/** Sala de time: 2 fileiras de mesas (2 tiles) com assentos dos dois lados. */
-function buildTeamRoom(z, zi) {
-  rugOps.push((c) => drawRug(c, z.x + 1, z.y + 2, z.w - 2, 10, shade(z.color, -0.38), shade(z.color, -0.6)));
-  // decoração na fileira colada à parede de cima (itens de parede: key baixa)
-  placeDecor(z.x + 2, z.y + 1, 3, 1, (c) => drawWhiteboard(c, z.x + 2, z.y + 1, 3), 0);
-  placeDecor(z.x + z.w - 6, z.y + 1, 3, 1, (c) => drawWhiteboard(c, z.x + z.w - 6, z.y + 1, 3), 0);
-  placeDecor(z.x + 6, z.y + 1, 2, 1, (c) => drawBookshelf(c, z.x + 6, z.y + 1, 2));
-  placePlant(z.x + 1, z.y + 1); placePlant(z.x + z.w - 2, z.y + 1);
-  placePlant(z.x + 1, z.y + 11); placePlant(z.x + z.w - 2, z.y + 11);
-  // janela na parede de cima, entre o quadro e a estante
-  addWindow(z.x + 8, z.y, 2);
-  addLight((z.x + 9) * TILE, (z.y + 1) * TILE + 40, 150, WINDOW, 0.35, 'window');
-  // luminária de teto no centro da sala
-  addLight((z.x + z.w / 2) * TILE, (z.y + z.h / 2) * TILE, 260, LAMP, 0.6, 'lamp');
-  const dxs = z.w >= 18 ? [2, 6, 10, 14] : [2, 6, 10];
-  const chairCols = ['#2b3346', '#3a2f4d', '#2f4a4a', '#4a3a2f'];
-  let n = 0;
-  for (const rowY of [4, 8]) {
-    for (const dx of dxs) {
-      const tx = z.x + dx, ty = z.y + rowY, seed = zi * 100 + n * 2;
-      blockRect(tx, ty, 2, 1);
-      pushFurn((ty + 1) * TILE, (c) => drawDesk(c, tx, ty, 2, seed));
-      // brilho dos monitores da mesa (topo do tampo fica ~10px acima da base)
-      addLight((tx + 1) * TILE, ty * TILE + 6, 46, SCREEN, 0.5, 'screen');
-      placeChair(z.id, tx, ty - 1, 'down', chairCols[(n) % 4]);
-      placeChair(z.id, tx + 1, ty + 1, 'up', chairCols[(n + 1) % 4]);
-      n++;
-    }
-  }
+/**
+ * Mesa de w tiles + cadeiras. vs[i] = 0: cadeira ACIMA (olhando p/ baixo); 1: ABAIXO
+ * (olhando p/ cima). o.mon=false: sem monitores individuais (pair programming).
+ */
+function placeDesk(z, tx, ty, w, seed, vs, cols, o = {}) {
+  const mon = o.mon !== false;
+  blockRect(tx, ty, w, 1);
+  pushFurn((ty + 1) * TILE, (c) => drawDesk(c, tx, ty, w, seed, { vs, mon }));
+  if (o.wide) pushFurn((ty + 1) * TILE, (c) => drawWideMonitor(c, tx * TILE + 13, ty * TILE - 7, seed));
+  for (let i = 0; i < w; i++) placeChair(z.id, tx + i, vs[i] === 0 ? ty - 1 : ty + 1, vs[i] === 0 ? 'down' : 'up', cols[(tx + i + ty) % cols.length]);
+  for (let i = 0; i < w; i += 2) addLight((tx + i + (i + 1 < w ? 1 : 0.5)) * TILE, ty * TILE + 6, 46, SCREEN, 0.5, 'screen');
+  addDeskProps(tx, ty, w, seed, vs, mon);
 }
 
+/** Poltrona baixa (assento extra, caminhável) — mesmo padrão do lounge. */
+function placeArmchair(z, tx, ty, f, col) {
+  addSeat(z.id, tx, ty, f);
+  pushFurn((ty + 1) * TILE, (c) => drawSofa(c, tx, ty, 1, f, col, 8));
+}
+function placeFloorLamp(tx, ty, col) {
+  blockRect(tx, ty, 1, 1);
+  pushFurn((ty + 1) * TILE, (c) => drawFloorLamp(c, tx, ty, col));
+  addLight(tx * TILE + 16, ty * TILE + 10, 120, LAMP, 0.5, 'lamp');
+}
+function placeRack(tx, ty, type, tag, seed, tagCol) {
+  blockRect(tx, ty, 1, 1);
+  pushFurn((ty + 1) * TILE, (c) => drawRack(c, tx, ty, type, tag, seed, tagCol));
+  for (const p of rackLightSpots(tx, ty, type)) addLight(p.x, p.y, 15, p.col, 0.8, 'screen');
+  addRackBlinks(tx, ty, type);
+}
+function addWindowLight(tx, ty) { addLight((tx + 1) * TILE, (ty + 1) * TILE + 40, 150, WINDOW, 0.35, 'window'); }
+
+/**
+ * DEV TEAM (piso grafite, acento azul): duas ILHAS de mesas costas com costas (3+3)
+ * sobre tapetes azuis, duas mesas de PAIR PROGRAMMING com monitor ultralargo
+ * compartilhado, quadro KANBAN na parede e um cantinho de servidores de build.
+ */
+function buildDev(z, zi) {
+  const cc = chairCols(z), [rb, rt] = accentRug(z);
+  rugOps.push((c) => drawRug(c, 1, 2, 5, 6, rb, rt));
+  rugOps.push((c) => drawRug(c, 7, 2, 5, 6, rb, rt));
+  // parede norte
+  placeDecor(3, 1, 5, 1, (c) => drawKanban(c, 3, 1, 5), 0);
+  addWindow(10, 0, 2); addWindowLight(10, 0);
+  wallItem((c) => drawPicture(c, 12, 1, z.color, 1));
+  placeDecor(13, 1, 2, 1, (c) => drawBookshelf(c, 13, 1, 2));
+  placePlant(1, 1, 'palm'); placePlant(15, 1, 'fern'); placePlant(15, 11, 'flower', z.color);
+  // ilhas: mesa A (cadeiras acima) encostada na mesa B (cadeiras abaixo)
+  placeDesk(z, 2, 4, 3, zi * 100 + 2, [0, 0, 0], cc);
+  placeDesk(z, 2, 5, 3, zi * 100 + 12, [1, 1, 1], cc);
+  placeDesk(z, 8, 4, 3, zi * 100 + 22, [0, 0, 0], cc);
+  placeDesk(z, 8, 5, 3, zi * 100 + 32, [1, 1, 1], cc);
+  // pair programming: 2 pessoas lado a lado, um monitor grande só
+  placeDesk(z, 12, 4, 2, zi * 100 + 42, [1, 1], cc, { mon: false, wide: true });
+  placeDesk(z, 12, 8, 2, zi * 100 + 52, [1, 1], cc, { mon: false, wide: true });
+  // servidores de build no canto
+  placeRack(1, 9, 'srv', 'B01', 3, z.color); placeRack(2, 9, 'net', 'B02', 4, z.color);
+  placeFloorLamp(6, 3, z.color); placeFloorLamp(14, 7, z.color);
+  addLight((z.x + z.w / 2) * TILE, (z.y + z.h / 2) * TILE, 260, LAMP, 0.6, 'lamp');
+}
+
+/**
+ * Deployment Team (piso de vinil/concreto claro, acento verde): mesas em CASCATA
+ * diagonal (cada uma um degrau do pipeline), painel de pipeline na parede, racks de
+ * produção, caixas de encomenda, bicicleta encostada e cantinho de release com tapete verde.
+ */
+function buildDeploy(z, zi) {
+  const cc = chairCols(z), [rb, rt] = accentRug(z);
+  rugOps.push((c) => drawRug(c, 26, 2, 6, 4, rb, rt));
+  // parede norte
+  placeDecor(19, 1, 6, 1, (c) => drawPipelineBoard(c, 19, 1, 6), 0);
+  progs.push({ x: 19 * TILE + 8, y: 1 * TILE - 20 + 12, w: 6 * TILE - 16, h: 3 });
+  addBlink(19 * TILE + 8 + 3 * 39 + 2, 1 * TILE - 20 + 6, 6, 2, DASH.amber, shade(DASH.amber, -0.55), 900, 0, 0.5);   // etapa em andamento
+  addLight(22 * TILE, 1 * TILE + 24, 120, '#7fffc0', 0.4, 'screen');
+  wallItem((c) => drawPicture(c, 25, 1, z.color, 2));
+  addWindow(27, 0, 2); addWindowLight(27, 0);
+  placeDecor(30, 1, 1, 1, (c) => drawBike(c, 30, 1, z.color));
+  placePlant(17, 1, 'cactus', z.color); placePlant(31, 1, 'flower', z.color);
+  // cascata de mesas (3 lugares cada)
+  const steps = [[18, 3], [21, 5], [24, 7], [27, 9]];
+  steps.forEach(([tx, ty], i) => placeDesk(z, tx, ty, 3, zi * 100 + i * 10 + 2, [0, 1, 0], cc));
+  // cantinho de release (tapete verde, mesinha e duas poltronas)
+  placeDecor(28, 3, 2, 2, (c) => drawCoffeeTable(c, 28, 3, 2, 2));
+  placeArmchair(z, 27, 3, 'right', shade(z.color, -0.1)); placeArmchair(z, 30, 3, 'left', shade(z.color, -0.1));
+  // racks de produção, caixas e plantas
+  placeRack(17, 9, 'srv', 'PR1', 5, z.color); placeRack(18, 9, 'stor', 'PR2', 6, z.color);
+  placeDecor(31, 9, 1, 1, (c) => drawCrates(c, 31, 9, z.color));
+  placeDecor(31, 10, 1, 1, (c) => drawCrates(c, 31, 10, z.color));
+  placeDecor(30, 10, 1, 1, (c) => drawCrates(c, 30, 10, z.color));
+  placePlant(17, 11, 'fern'); placePlant(22, 11, 'cactus', z.color); placePlant(31, 11, 'palm');
+  placeFloorLamp(21, 8, z.color);
+  addLight((z.x + z.w / 2) * TILE, (z.y + z.h / 2) * TILE, 260, LAMP, 0.6, 'lamp');
+}
+
+/**
+ * Housekeeping Team (carpete bege, acento roxo): BANCADA CORRIDA de 8 lugares em zigue-zague,
+ * copa com pia na parede, vitrine de troféus, estante de suprimentos com carrinho de
+ * limpeza e um sofá de canto com poltronas.
+ */
+function buildHouse(z, zi) {
+  const cc = chairCols(z), [rb, rt] = accentRug(z, 0.7);
+  rugOps.push((c) => drawRug(c, 35, 3, 10, 5, rb, rt));
+  // parede norte: copa, quadro, janela, troféus, suprimentos
+  placeDecor(34, 1, 4, 1, (c) => drawCounter(c, 34, 1, 4, [{ k: 'sink', at: 0 }, { k: 'micro', at: 1 }, { k: 'coffee', at: 2 }, { k: 'fruit', at: 3 }]));
+  addSteam(36 * TILE + 16, 1 * TILE - 10 + 13);
+  addLight(36.5 * TILE, 1 * TILE + 26, 38, '#ffcf8a', 0.4, 'screen');
+  wallItem((c) => drawPicture(c, 38, 1, z.color, 3));
+  addWindow(39, 0, 2); addWindowLight(39, 0);
+  placeDecor(42, 1, 2, 1, (c) => drawTrophyShelf(c, 42, 1, 2));
+  wallItem((c) => drawPicture(c, 45, 1, z.color, 4));
+  placeDecor(46, 1, 2, 1, (c) => drawSupplyShelf(c, 46, 1, 2, z.color));
+  placePlant(33, 1, 'cactus', z.color); placePlant(48, 1, 'fern');
+  // bancada corrida: 8 lugares alternando lados
+  placeDesk(z, 36, 5, 8, zi * 100 + 2, [0, 1, 0, 1, 0, 1, 0, 1], cc);
+  // canto de limpeza
+  placeDecor(34, 8, 1, 1, (c) => drawCleanCart(c, 34, 8, z.color));
+  placeDecor(34, 10, 3, 1, (c) => drawSupplyShelf(c, 34, 10, 3, z.color));
+  placePlant(33, 11, 'palm'); placeFloorLamp(33, 8, z.color);
+  // sofá de canto
+  placeDecor(44, 10, 3, 1, (c) => drawSofa(c, 44, 10, 3, 'up', shade(z.color, -0.25)));
+  placeDecor(47, 8, 1, 3, (c) => drawSofa(c, 47, 8, 3, 'left', shade(z.color, -0.25)));
+  placeDecor(44, 8, 2, 2, (c) => drawCoffeeTable(c, 44, 8, 2, 2));
+  placeArmchair(z, 43, 8, 'right', shade(z.color, 0.05)); placeArmchair(z, 45, 7, 'down', shade(z.color, 0.05));
+  addLight(45.5 * TILE, 9 * TILE, 120, LAMP, 0.45, 'lamp');
+  addLight((z.x + z.w / 2) * TILE, (z.y + z.h / 2) * TILE, 260, LAMP, 0.6, 'lamp');
+}
+
+/** Boardroom (carvalho claro, acento vinho): mesa comprida no tapete, credenza, vitrine, dois cantos de conversa. */
 function buildBoardroom(z) {
-  rugOps.push((c) => drawRug(c, 2, 20, 16, 9, '#5a2a37', '#8a4152'));
+  const [rb, rt] = accentRug(z), bc = shade(z.color, -0.5);
+  rugOps.push((c) => drawRug(c, 2, 20, 16, 9, rb, rt));
   const topX = [6, 8, 10, 12, 14], botX = [6, 8, 10, 12, 14];
   blockRect(5, 23, 11, 3);
   pushFurn(26 * TILE, (c) => drawLongTable(c, 5, 23, 11, 3, topX, botX));
-  for (const sx of topX) placeChair(z.id, sx, 22, 'down', '#20242f');
-  for (const sx of botX) placeChair(z.id, sx, 26, 'up', '#20242f');
-  placeChair(z.id, 4, 24, 'right', '#20242f');
-  placeChair(z.id, 16, 24, 'left', '#20242f');
+  for (const sx of topX) placeChair(z.id, sx, 22, 'down', bc);
+  for (const sx of botX) placeChair(z.id, sx, 26, 'up', bc);
+  placeChair(z.id, 4, 24, 'right', bc);
+  placeChair(z.id, 16, 24, 'left', bc);
+  // parede norte
   placeDecor(8, 17, 5, 1, (c) => drawScreenWall(c, 8, 17, 5, 'projector'), 0);
   placeDecor(14, 17, 3, 1, (c) => drawWhiteboard(c, 14, 17, 3), 0);
+  wallItem((c) => drawPicture(c, 2, 17, z.color, 5)); wallItem((c) => drawPicture(c, 13, 17, z.color, 6));
+  placeDecor(17, 17, 3, 1, (c) => drawCounter(c, 17, 17, 3, [{ k: 'coffee', at: 0 }, { k: 'fruit', at: 1 }, { k: 'sink', at: 2 }]));
+  addSteam(17 * TILE + 16, 17 * TILE - 10 + 13);
+  addLight(18.5 * TILE, 17 * TILE + 26, 38, '#ffcf8a', 0.4, 'screen');
+  placePlant(1, 17, 'fern');
+  // parede sul: estante e vitrine de troféus
   placeDecor(8, 32, 4, 1, (c) => drawBookshelf(c, 8, 32, 4));
-  placePlant(1, 17); placePlant(19, 17); placePlant(1, 32); placePlant(19, 32);
-  placePlant(18, 22); placePlant(18, 28);
-  addWindow(z.x + 6, z.y, 2);
-  addLight((z.x + 7) * TILE, (z.y + 1) * TILE + 40, 150, WINDOW, 0.35, 'window');
+  placeDecor(13, 32, 3, 1, (c) => drawTrophyShelf(c, 13, 32, 3));
+  placePlant(1, 32, 'palm'); placePlant(19, 32, 'palm');
+  placePlant(18, 22, 'flower', z.color); placePlant(18, 28, 'flower', z.color);
+  // canto de conversa (sudoeste)
+  rugOps.push((c) => drawRug(c, 1, 29, 6, 3, shade(rb, 0.05), rt));
+  placeArmchair(z, 2, 29, 'right', shade(z.color, -0.2)); placeArmchair(z, 5, 29, 'left', shade(z.color, -0.2));
+  placeDecor(3, 29, 2, 2, (c) => drawCoffeeTable(c, 3, 29, 2, 2));
+  placeFloorLamp(1, 27, z.color); placeFloorLamp(19, 20, z.color);
+  // lateral direita: bebedouro
+  placeDecor(19, 25, 1, 1, (c) => drawWaterCooler(c, 19, 25));
+  placeDecor(15, 30, 3, 1, (c) => drawBench(c, 15, 30, 3));
+  addWindow(z.x + 6, z.y, 2); addWindowLight(z.x + 6, z.y);
   addLight((z.x + z.w / 2) * TILE, (z.y + z.h / 2) * TILE, 280, LAMP, 0.6, 'lamp');
   addLight(10.5 * TILE, 17 * TILE + 40, 110, '#dfe9ff', 0.4, 'screen'); // projeção
 }
 
+/** Lounge (carpete café-com-leite, acento laranja): sofás, máquina de venda, pingue-pongue e pufes. */
 function buildLounge(z) {
-  rugOps.push((c) => drawRug(c, 22, 20, 11, 9, '#7a4a2a', '#b06e3e'));
+  const [rb, rt] = accentRug(z, 0.3);
+  rugOps.push((c) => drawRug(c, 22, 20, 11, 9, rb, rt));
   placeDecor(25, 22, 4, 1, (c) => drawSofa(c, 25, 22, 4, 'down', '#c46a3c'));
   placeDecor(25, 27, 4, 1, (c) => drawSofa(c, 25, 27, 4, 'up', '#c46a3c'));
   placeDecor(23, 23, 1, 4, (c) => drawSofa(c, 23, 23, 4, 'right', '#3f7fa8'));
@@ -1608,14 +2123,26 @@ function buildLounge(z) {
     pushFurn((ty + 1) * TILE, (c) => drawSofa(c, tx, ty, 1, f, '#8a5cc0', 8));
   }
   placeDecor(27, 17, 3, 1, (c) => drawScreenWall(c, 27, 17, 3, 'tv'), 0);
+  tvs.push({ x: 27 * TILE, y: 17 * TILE - 20, w: 3 * TILE });
+  wallItem((c) => drawPicture(c, 26, 17, z.color, 7));
   placeDecor(31, 17, 2, 1, (c) => drawBookshelf(c, 31, 17, 2));
   placeDecor(25, 32, 4, 1, (c) => drawBookshelf(c, 25, 32, 4));
-  placePlant(21, 17); placePlant(33, 17); placePlant(21, 32); placePlant(33, 32);
+  placeDecor(21, 17, 1, 2, (c) => drawVending(c, 21, 17, shade(z.color, -0.1)));
+  placePlant(33, 17, 'palm'); placePlant(21, 32, 'flower', z.color); placePlant(33, 32, 'fern');
+  // mesa de pingue-pongue e pufes
+  placeDecor(24, 29, 4, 2, (c) => drawPingPong(c, 24, 29, 4, 2));
+  for (const [tx, ty, f, col] of [[31, 29, 'up', '#e0964a'], [32, 30, 'left', '#3aa3a8']]) {
+    addSeat(z.id, tx, ty, f);
+    pushFurn((ty + 1) * TILE, (c) => drawPouf(c, tx, ty, col));
+  }
+  placeFloorLamp(21, 22, z.color); placeFloorLamp(33, 22, z.color);
   addLight((z.x + z.w / 2) * TILE, (z.y + z.h / 2) * TILE, 230, LAMP, 0.6, 'lamp');
   addLight(28.5 * TILE, 17 * TILE + 50, 100, '#9cc4ff', 0.4, 'screen'); // TV
+  addLight(21.5 * TILE, 18 * TILE, 60, '#ffb070', 0.4, 'screen');        // vitrine da máquina de venda
   // cantinho do café (canto sul): bancada com cafeteira/micro-ondas/frutas/pia + geladeira.
   // O comportamento "tomar café" (behaviors.js) cai no lounge quando não há copa.
   placeDecor(29, 32, 4, 1, (c) => drawCounter(c, 29, 32, 4, [{ k: 'fruit', at: 0 }, { k: 'coffee', at: 1 }, { k: 'micro', at: 2 }, { k: 'sink', at: 3 }]));
+  addSteam(30 * TILE + 16, 32 * TILE - 10 + 13);
   placeDecor(22, 31, 1, 2, (c) => drawFridge(c, 22, 31));
   addLight(30.5 * TILE, 32 * TILE + 2, 38, '#ffcf8a', 0.4, 'screen'); // luz da cafeteira
 }
@@ -1625,6 +2152,7 @@ function buildLounge(z) {
  * viradas para ele, duas fileiras de racks com aleia fria no meio, canaletas de cabos,
  * CRACs na parede sul, extintor, luz de emergência e carrinho de manutenção.
  * Só os postos de operação têm assento; racks/CRAC/carrinho bloqueiam o tile.
+ * (Referência de qualidade: só ganhou LEDs que piscam em renderProps.)
  */
 function buildServerRoom(z) {
   // --- chão: tapete da área de operação e canaletas de cabos (sob os móveis)
@@ -1642,6 +2170,11 @@ function buildServerRoom(z) {
   addLight(42 * TILE, 17 * TILE + 8, 110, '#7fb4ff', 0.5, 'screen');
   addLight(44.5 * TILE, 17 * TILE + 8, 120, '#6be0ff', 0.55, 'screen');
   addLight(47 * TILE, 17 * TILE + 8, 110, '#7fffc0', 0.45, 'screen');
+  for (let k = 0; k < 10; k++) {                                                          // LEDs do trilho do videowall
+    const on = k === 7 ? DASH.amber : k === 3 ? '#4fd8ff' : DASH.green;
+    addBlink(40 * TILE + 2 + 26 + k * 4, 17 * TILE - 19 + 37, 2, 1, on, '#161b26', 700 + k * 130, hash(k, 3, 235), k === 7 ? 0.5 : 0.85);
+  }
+  addBlink(35 * TILE + 14, 17 * TILE - 20 + 9, 2, 1, '#ff5a52', '#20242f', 1400, 0, 0.5);   // LED da luz de emergência
   // --- mesas de operação: 2 x 3 postos, de frente para o videowall
   const seatCols = ['#26314a', '#1f3d4d'];
   let n = 0;
@@ -1662,9 +2195,7 @@ function buildServerRoom(z) {
   for (const [ry, name, tagCol, types] of rows) {
     xs.forEach((tx, i) => {
       const tag = name + String(i + 1).padStart(2, '0');
-      blockRect(tx, ry, 1, 1);
-      pushFurn((ry + 1) * TILE, (c) => drawRack(c, tx, ry, types[i], tag, i + (name === 'B' ? 20 : 0), tagCol));
-      for (const p of rackLightSpots(tx, ry, types[i])) addLight(p.x, p.y, 15, p.col, 0.8, 'screen');   // LEDs (cintilam sozinhos)
+      placeRack(tx, ry, types[i], tag, i + (name === 'B' ? 20 : 0), tagCol);   // LEDs: luz cintila sozinha + pisca em renderProps
     });
   }
   // --- aleia fria: placa do piso removida, com cabos subindo
@@ -1679,23 +2210,30 @@ function buildServerRoom(z) {
   addLight((z.x + z.w / 2) * TILE, (z.y + z.h / 2) * TILE, 260, '#cfe4ff', 0.4, 'lamp');   // luz fria de teto
 }
 
+/** Corredor (madeira escura): passadeira, quadros na cor de cada time, relógios, bebedouros e bancos. */
 function buildCorridor() {
-  for (const px of [1, 15, 17, 31, 33, 47]) placePlant(px, 13);
-  placePlant(1, 15); placePlant(48, 15); placePlant(48, 13);
+  rugOps.push((c) => drawRunner(c, 3 * TILE, 14 * TILE + 6, 44 * TILE, '#3f6a78'));
+  const kinds = [['palm', 1, 13], ['fern', 15, 13], ['fern', 17, 13], ['cactus', 31, 13], ['fern', 33, 13], ['palm', 47, 13], ['fern', 1, 15], ['fern', 48, 15], ['cactus', 48, 13]];
+  for (const [k, px, py] of kinds) placePlant(px, py, k, '#e0964a');
   for (const bx of [12, 28, 44]) placeDecor(bx, 15, 3, 1, (c) => drawBench(c, bx, 15, 3));
+  // quadros na parede (cada time pendura arte na sua cor) e relógios na parede divisória
+  [[4, 0], [12, 0], [20, 1], [28, 1], [36, 2], [44, 2]].forEach(([tx, zi], i) => wallItem((c) => drawPicture(c, tx, 13, zones[zi].color, 10 + i)));
+  for (const cx of [16, 32]) { wallItem((c) => drawClockFace(c, cx, 13)); clocks.push({ cx: cx * TILE + 16, cy: 13 * TILE - 20 + 9 }); }
+  for (const wx of [21, 35]) placeDecor(wx, 13, 1, 1, (c) => drawWaterCooler(c, wx, 13));
   for (const lx of [8, 24, 40]) addLight(lx * TILE + 16, 14 * TILE + 16, 140, LAMP, 0.45, 'lamp');
 }
 
 // Monta tudo (dados puros — sem DOM)
 carve();
-buildTeamRoom(zones[0], 0);
-buildTeamRoom(zones[1], 1);
-buildTeamRoom(zones[2], 2);
+buildDev(zones[0], 0);
+buildDeploy(zones[1], 1);
+buildHouse(zones[2], 2);
 buildBoardroom(zones[3]);
 buildLounge(zones[4]);
 buildServerRoom(zones[5]);
 buildCorridor();
 furnOps.sort((a, b) => a.k - b.k); // sort estável: empates mantêm a ordem de inserção
+
 
 export const OFFICE = { cols: COLS, rows: ROWS, zones, seats, lights };
 
@@ -1776,6 +2314,21 @@ function roomVignettes(g) {
   }
 }
 
+// Piso NEUTRO por sala (a cor do time vive nos objetos — ver GUIA DE PALETA acima).
+const FLOORS = {
+  dev:    { t: 'carpet', col: '#585c68', seam: true },   // carpete grafite azulado
+  deploy: { t: 'vinyl',  col: '#8a8f96' },               // vinílico/concreto polido claro
+  house:  { t: 'carpet', col: '#8c816f', seam: true },   // carpete bege quente
+  board:  { t: 'wood',   pal: WOOD_OAK },                // carvalho claro (a mesa é nogueira escura)
+  lounge: { t: 'carpet', col: '#6b625a' },               // carpete café-com-leite
+};
+function drawZoneFloor(g, tx, ty, zoneId) {
+  const f = FLOORS[zoneId] || FLOORS.dev;
+  if (f.t === 'wood') drawWoodTile(g, tx, ty, f.pal);
+  else if (f.t === 'vinyl') drawVinylTile(g, tx, ty, f.col);
+  else drawCarpetTile(g, tx, ty, f.col, !!f.seam);
+}
+
 function buildCaches() {
   const H = WORLD_H + MARGIN_TOP;
   floorCache = makeCanvas(WORLD_W, H);
@@ -1792,7 +2345,7 @@ function buildCaches() {
       const zi = zoneGrid[i];
       if (zi < 0) drawWoodTile(g, tx, ty);
       else if (zones[zi].kind === 'server') drawRaisedFloorTile(g, tx, ty);
-      else drawCarpetTile(g, tx, ty, shade(zones[zi].color, -0.55));
+      else drawZoneFloor(g, tx, ty, zones[zi].id);
     }
   }
   // 2) sombra/AO das paredes no piso, 3) tapetes, 4) vinheta por sala
@@ -1824,6 +2377,70 @@ export function renderOverlay(ctx) {
   if (!overlayCache) return;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(overlayCache, 0, -MARGIN_TOP);
+}
+
+// ---------------------------------------------------------------------------
+// Camada animada (renderProps): chamada TODA frame, logo depois de renderFloor e
+// abaixo dos personagens. Só percorre as listas pequenas montadas na inicialização
+// (~250 itens) e emite fillRect: sem canvas novo, sem alocação por frame (exceto 1 Date).
+// ---------------------------------------------------------------------------
+const STEAM_COL = ['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.20)', 'rgba(255,255,255,0.30)', 'rgba(255,255,255,0.38)'];
+const TV_BG_TOP = '#2a4270', TV_BG = '#1d2b45';
+const PIPE_OFF = shade(DASH.amber, -0.55);
+
+function clockHand(ctx, cx, cy, ang, len) {
+  const sx = Math.sin(ang), sy = -Math.cos(ang);
+  for (let r = 1; r <= len; r++) ctx.fillRect(Math.round(cx + sx * r), Math.round(cy + sy * r), 1, 1);
+}
+
+export function renderProps(ctx, tNow) {
+  const t = Number.isFinite(tNow) && tNow > 0 ? tNow : 0;
+  // LEDs, cursores e luzes de status (piscam entre duas cores)
+  for (let i = 0; i < blinks.length; i++) {
+    const b = blinks[i];
+    const col = ((t / b.per + b.ph) % 1) < b.duty ? b.on : b.off;
+    if (col) { ctx.fillStyle = col; ctx.fillRect(b.x, b.y, b.w, b.h); }
+  }
+  // barra de progresso do pipeline de deploy
+  for (let i = 0; i < progs.length; i++) {
+    const p = progs[i], u = (t / 9000) % 1;
+    ctx.fillStyle = '#1a2436'; ctx.fillRect(p.x, p.y, p.w, p.h);
+    const fw = Math.round(p.w * u);
+    ctx.fillStyle = DASH.green; ctx.fillRect(p.x, p.y, fw, p.h);
+    ctx.fillStyle = '#b8ffcf'; ctx.fillRect(p.x + Math.max(0, fw - 1), p.y, 1, p.h);
+  }
+  // barras da TV do lounge
+  for (let i = 0; i < tvs.length; i++) {
+    const v = tvs[i];
+    ctx.fillStyle = TV_BG_TOP; ctx.fillRect(v.x + 4, v.y + 2, v.w - 8, 6);
+    ctx.fillStyle = TV_BG; ctx.fillRect(v.x + 4, v.y + 8, v.w - 8, 8);
+    ctx.fillStyle = '#ffb86b';
+    for (let k = 0; k < 6; k++) {
+      const bh = 2 + Math.round(4 + 4 * Math.sin(t / 700 + k * 1.7) + 2 * Math.sin(t / 310 + k * 3.1));
+      ctx.fillRect(v.x + 8 + k * 9, v.y + 15 - bh, 5, bh);
+    }
+  }
+  // vapor das xícaras: 3 partículas por fonte, subindo e sumindo
+  for (let i = 0; i < steams.length; i++) {
+    const s = steams[i];
+    for (let j = 0; j < 3; j++) {
+      const u = (t / 1600 + s.ph + j / 3) % 1;
+      ctx.fillStyle = STEAM_COL[Math.min(3, Math.floor((1 - u) * 4))];
+      ctx.fillRect(s.x + Math.round(Math.sin(u * 6.28 + s.ph * 9 + j) * 1.5), s.y - Math.round(u * 9), 1, 2);
+    }
+  }
+  // relógios de parede (hora real)
+  if (clocks.length) {
+    const d = new Date(), sec = d.getSeconds() + d.getMilliseconds() / 1000, min = d.getMinutes() + sec / 60, hr = (d.getHours() % 12) + min / 60;
+    for (let i = 0; i < clocks.length; i++) {
+      const k = clocks[i];
+      ctx.fillStyle = '#1a1f2b';
+      clockHand(ctx, k.cx, k.cy, hr / 12 * 6.2832, 3);
+      clockHand(ctx, k.cx, k.cy, min / 60 * 6.2832, 5);
+      ctx.fillStyle = '#d9534f';
+      clockHand(ctx, k.cx, k.cy, Math.floor(sec) / 60 * 6.2832, 6);
+    }
+  }
 }
 
 const labelWidths = new Map();

@@ -1,7 +1,7 @@
 // Orquestração do frontend: canvas, câmera, game loop e ciclo de vida dos
 // personagens a partir do store. Cola office.js (cenário) com characters.js (gente).
 
-import { TILE, OFFICE, WORLD_W, WORLD_H, renderFloor, renderOverlay, renderZoneLabels, zoneForTeam, freeSeat, drawSeatFront, isWalkable }
+import { TILE, OFFICE, WORLD_W, WORLD_H, renderFloor, renderOverlay, renderZoneLabels, zoneForTeam, freeSeat, drawSeatFront, isWalkable, renderProps }
   from './office.js';
 import { Character, NAMETAG_ZOOM_MIN } from './characters.js';
 import { renderLightLayer } from './lighting.js';
@@ -35,6 +35,25 @@ function listaTilesLivres() {
   return tilesLivres;
 }
 const ocupadosEmPe = new Set();
+
+/** Hash estável de string -> inteiro positivo (FNV-1a). */
+function hashId(id) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return Math.abs(h);
+}
+
+/**
+ * Escolhe assento espalhado pela sala. `freeSeat` devolve sempre o primeiro
+ * livre, então todo mundo acabava amontoado no mesmo canto — feio e, com os
+ * nametags, ilegível. Aqui o ponto de partida vem do hash do id, então a
+ * distribuição fica larga e continua estável entre recargas.
+ */
+function assentoEspalhado(zoneId, tomados, agentId) {
+  const doZona = OFFICE.seats.filter((s) => s.zoneId === zoneId && !tomados.has(s.id));
+  if (!doZona.length) return freeSeat(zoneId, tomados);   // sala cheia: cai no padrão
+  return doZona[hashId(agentId) % doZona.length] || doZona[0];
+}
 
 /** Lugar em pé estável por id, sem repetir enquanto houver tile livre. */
 function lugarEmPe(id) {
@@ -86,7 +105,7 @@ function syncCharacters() {
     let ch = characters.get(agent.id);
     if (!ch) {
       const zone = zoneForTeam(agent.team);
-      const seat = freeSeat(zone?.id, takenSeats);
+      const seat = assentoEspalhado(zone?.id, takenSeats, agent.id);
       if (seat) takenSeats.add(seat.id);
       ch = new Character(agent, seat);
       characters.set(agent.id, ch);
@@ -167,6 +186,7 @@ function frame(now) {
   ctx.imageSmoothingEnabled = false;
 
   renderFloor(ctx);
+  renderProps(ctx, now);   // detalhes animados (cursores, LEDs, vapor) sobre o piso
   // Rótulos das salas logo após o piso: são decoração fixa, então perdem para
   // nametags e balões, que é a informação viva. Antes brigavam com os balões
   // dos personagens da fileira de cima.
