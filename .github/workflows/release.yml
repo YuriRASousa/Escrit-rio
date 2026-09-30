@@ -32,6 +32,19 @@ jobs:
         shell: bash
         run: echo "v=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
+      # Uma release JÁ PUBLICADA faz o electron-builder pular o envio dos
+      # arquivos — foi o que deixou a v0.1.0 com o instalador faltando. Apagar
+      # a release desta versão antes de empacotar torna o re-run idempotente.
+      # Só remove a release da versão que está sendo reconstruída agora.
+      - name: Limpar release incompleta desta versao
+        shell: bash
+        continue-on-error: true
+        run: |
+          gh release delete "v${{ steps.ver.outputs.v }}" --yes --cleanup-tag \
+            || echo "nenhuma release anterior para limpar"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # O electron-builder cria a release como RASCUNHO, de propósito: o GitHub
       # recusa publicar uma release cuja tag ainda não existe, e aqui a tag só
       # nasce no passo seguinte.
