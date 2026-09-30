@@ -57,7 +57,7 @@
           ]
         }
       ],
-      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",
       "icon": "build/icon.png"
     },
     "nsis": {

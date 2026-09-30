@@ -2,8 +2,10 @@ Escritório virtual em pixel art que mostra os agentes do Claude Code trabalhand
 
 ## Como instalar
 
-- **Instalador** — o `.exe` com "Setup" no nome. Instala, cria atalho na área de trabalho e no menu iniciar.
-- **Portátil** — o `.exe` com "portatil" no nome. Roda direto, sem instalar.
+- **Instalador** — o arquivo `...-Setup-...exe`. Instala, cria atalho na área de trabalho e no menu iniciar.
+- **Portátil** — o arquivo `...-portatil.exe`. Roda direto, sem instalar.
+
+Os dois têm cerca de 110 MB, porque trazem o runtime junto.
 
 Não precisa ter Node.js instalado.
 
