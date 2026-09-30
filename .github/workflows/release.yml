@@ -1,8 +1,6 @@
 name: Release
 
-# Publica o executável quando uma tag v* é empurrada.
-# Também dá para disparar à mão pela aba Actions (workflow_dispatch) — útil
-# quando quem dispara não consegue empurrar tags.
+# Publica o executável quando uma tag v* é empurrada, ou à mão pela aba Actions.
 on:
   push:
     tags: ['v*']
@@ -32,46 +30,51 @@ jobs:
         shell: bash
         run: echo "v=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
-      # Uma release JÁ PUBLICADA faz o electron-builder pular o envio dos
-      # arquivos — foi o que deixou a v0.1.0 com o instalador faltando. Apagar
-      # a release desta versão antes de empacotar torna o re-run idempotente.
-      # Só remove a release da versão que está sendo reconstruída agora.
-      - name: Limpar release incompleta desta versao
+      # Só empacota. A publicação é feita adiante pelo gh, de propósito: o
+      # publisher do electron-builder subia apenas o .blockmap e deixava os
+      # .exe de fora, sem falhar o passo.
+      - name: Empacotar
+        run: npx electron-builder --win --publish never
+
+      - name: Conferir o que foi gerado
+        shell: bash
+        run: |
+          ls -lh release/*.exe
+          test -n "$(ls release/*.exe 2>/dev/null)" || { echo "nenhum .exe gerado"; exit 1; }
+
+      # Re-rodar tem de produzir uma release completa, não herdar a anterior.
+      - name: Limpar release anterior desta versao
         shell: bash
         continue-on-error: true
-        run: |
-          gh release delete "v${{ steps.ver.outputs.v }}" --yes --cleanup-tag \
-            || echo "nenhuma release anterior para limpar"
+        run: gh release delete "v${{ steps.ver.outputs.v }}" --yes --cleanup-tag || echo "nada a limpar"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # O electron-builder cria a release como RASCUNHO, de propósito: o GitHub
-      # recusa publicar uma release cuja tag ainda não existe, e aqui a tag só
-      # nasce no passo seguinte.
-      - name: Empacotar e subir os arquivos
-        run: npx electron-builder --win --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Tirar do rascunho cria a tag apontando para este commit.
-      - name: Publicar a release
+      # Cria a tag, a release e anexa os instaladores num comando só.
+      - name: Publicar a release com os instaladores
         shell: bash
         run: |
-          gh release edit "v${{ steps.ver.outputs.v }}" \
-            --draft=false \
+          gh release create "v${{ steps.ver.outputs.v }}" release/*.exe \
             --target "${{ github.sha }}" \
             --title "Escritorio dos Agentes v${{ steps.ver.outputs.v }}" \
             --notes-file docs/RELEASE_NOTES.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Sobe também como artefato do run, para dar para baixar mesmo se a
-      # publicação da release falhar.
+      # Falha o job se a release não ficou com os .exe anexados.
+      - name: Conferir a release publicada
+        shell: bash
+        run: |
+          n=$(gh release view "v${{ steps.ver.outputs.v }}" --json assets \
+                --jq '[.assets[] | select(.name | endswith(".exe"))] | length')
+          echo "instaladores anexados: $n"
+          test "$n" -ge 1 || { echo "release saiu sem instalador"; exit 1; }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: windows-instalador
-          path: |
-            release/*.exe
-            release/*.blockmap
+          path: release/*.exe
           if-no-files-found: warn
