@@ -214,7 +214,11 @@ export function createBehavior(agent, opts) {
 
   // ---------- início de atividades ----------
   function startCoffee(ctx) {
-    const t = findInZone(ctx, zoneOfKind(ctx, 'kitchen'), 3);
+    // A copa deixou de existir quando virou sala de servidores: a máquina de café
+    // passou para o lounge. Procura a copa primeiro (se algum mapa ainda tiver uma)
+    // e cai no lounge — sem isso o café simplesmente nunca mais aconteceria.
+    const zone = zoneOfKind(ctx, 'kitchen') || zoneOfKind(ctx, 'lounge');
+    const t = findInZone(ctx, zone, 3);
     if (!t) return false;
     setState('coffee', 'walk');
     if (go(ctx, t, 'coffee')) return true;

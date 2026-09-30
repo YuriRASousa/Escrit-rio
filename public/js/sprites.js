@@ -24,7 +24,6 @@ const RIM = 0.42;          // rim light no topo-esquerdo da cabeça
 
 const EYE = '#1a1325';
 const MOUTH_IN = '#6b1f30';
-const CHAIR = '#3d4258', CHAIR_HI = '#5a617e', CHAIR_DK = '#2a2e40';
 
 // ---------------------------------------------------------------------------
 // PRNG determinístico: hash FNV-1a da string -> mulberry32
@@ -521,12 +520,6 @@ function legsSitFront(g, L, D) {
   }
 }
 
-function chairBox(g, x, y, w, h) {
-  rect(g, CHAIR, x, y, w, h);
-  rect(g, CHAIR_HI, x, y, w, 1);
-  rect(g, CHAIR_DK, x, y + h - 1, w, 1);
-}
-
 // Braços que ficam ATRÁS do torso (ou ao lado): down / up / gest
 function armPre(g, L, D, side, A, y0) {
   const x0 = side < 0 ? D.axL : D.axR;
@@ -640,12 +633,10 @@ function paintFB(g, L, back, P) {
   const tH = sit ? 5 : 6;
   const txL = 8 - D.tw / 2;
 
-  // cadeira (atrás do personagem quando de frente)
-  if (sit && !back) { chairBox(g, txL - 2, y0 - 1, D.tw + 4, 7); rect(g, CHAIR_DK, txL - 1, 19, D.tw + 2, 3); }
-
   // pernas
   if (!sit) legsStandFB(g, L, D, P);
   else if (!back) legsSitFront(g, L, D);
+  else { rect(g, L.pants, txL, y0 + tH, D.tw, 2); rect(g, L.pantsShade, txL, y0 + tH + 2, D.tw, 1); } // de costas: coxas sobre o assento
 
   // tronco inteiro (braços, torso, cabeça) pode se inclinar de lado; as pernas ficam plantadas
   g.save();
@@ -669,7 +660,6 @@ function paintFB(g, L, back, P) {
   if (back) {
     if (isPostFB(P.armL.m, true)) armPost(g, L, D, -1, P.armL, y0, true);
     if (isPostFB(P.armR.m, true)) armPost(g, L, D, 1, P.armR, y0, true);
-    if (sit) { chairBox(g, txL - 1, y0 + 2, D.tw + 2, 4); rect(g, CHAIR_DK, txL - 1, 20, D.tw + 2, 2); }
   }
 
   // cabeça (com hy<0 a cabeça sobe e o pescoço aparece)
@@ -764,9 +754,6 @@ function paintSide(g, L, P) {
   const { sx, sw } = D;
 
   if (sit) {
-    // encosto atrás (à direita), assento sob a coxa e base
-    chairBox(g, sx + sw - 1, y0 - 1, 3, 9);
-    rect(g, CHAIR_HI, 5, 21, 8, 1); rect(g, CHAIR_DK, 5, 22, 8, 1); rect(g, CHAIR_DK, 8, 23, 2, 1);
     // perna: coxa para frente e pé
     rect(g, L.pants, 3, 19, 7, 2);
     rect(g, L.pantsShade, 4, 20, 6, 1);
