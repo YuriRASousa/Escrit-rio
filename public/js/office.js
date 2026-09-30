@@ -561,26 +561,31 @@ function drawDesk(c, tx, ty, w, seed) {
  * do facing (o que está ao norte da pessoa desenha antes do assento).
  * Encosto virado para o espectador (facing 'up') usa só 8px para não esconder a pessoa.
  */
-function drawChair(c, tx, ty, facing, col = '#2b3346') {
+function drawChair(c, tx, ty, facing, col = '#2b3346', part = 'back') {
   const x = tx * TILE, y = ty * TILE;
   const cx = x + 16, cy = y + 17;
-  // sombra no chão: baixo-direita
-  ell(c, cx + 3, cy + 6, 11, 7, 'rgba(0,0,0,0.22)');
-  // base estrela (5 pontas) + rodinhas
-  for (let k = 0; k < 5; k++) {
-    const a = Math.PI / 2 + 0.31 + k * 2 * Math.PI / 5;
-    const ex = Math.round(cx + Math.cos(a) * 10), ey = Math.round(cy + 5 + Math.sin(a) * 5);
-    line(c, cx, cy + 4, ex, ey, '#1a1e28');
-    rect(c, ex - 1, ey, 3, 2, '#0f1218'); rect(c, ex - 1, ey, 1, 1, '#586178');
-  }
-  rect(c, cx - 1, cy + 2, 3, 4, '#2a2f3b'); rect(c, cx - 1, cy + 2, 1, 4, '#586178');   // coluna
+  const base = () => {
+    // sombra no chão: baixo-direita
+    ell(c, cx + 3, cy + 6, 11, 7, 'rgba(0,0,0,0.22)');
+    // base estrela (5 pontas) + rodinhas
+    for (let k = 0; k < 5; k++) {
+      const a = Math.PI / 2 + 0.31 + k * 2 * Math.PI / 5;
+      const ex = Math.round(cx + Math.cos(a) * 10), ey = Math.round(cy + 5 + Math.sin(a) * 5);
+      line(c, cx, cy + 4, ex, ey, '#1a1e28');
+      rect(c, ex - 1, ey, 3, 2, '#0f1218'); rect(c, ex - 1, ey, 1, 1, '#586178');
+    }
+    rect(c, cx - 1, cy + 2, 3, 4, '#2a2f3b'); rect(c, cx - 1, cy + 2, 1, 4, '#586178');   // coluna
+  };
   const bc = shade(col, 0.06);
-  const backH = () => {                                                                   // encosto horizontal (down/up)
+  const backH = (hOverride) => {                                                          // encosto horizontal (down/up)
     const up = facing === 'up';
-    // 22px de largura contra os 16px do tronco do sprite: sobram ~3px de encosto
-    // aparecendo de cada lado de quem está sentado. Com 16px o corpo cobria o
-    // encosto inteiro e a cadeira sumia embaixo do personagem.
-    const bx = x + 5, by = up ? y + 24 : y + 5, bw = 22, bd = 5, bh = up ? 8 : 14, sg = up ? -1 : 1;
+    // MEDIDO: a silhueta do sprite sentado tem 30px de largura (x de -14 a +15 em
+    // volta do centro do tile). Encosto de 22px cabe inteiro dentro dela, então
+    // alargar nunca ia resolver — a correção é de ORDEM, não de tamanho: quando a
+    // pessoa está de costas (facing 'up'), o encosto fica ENTRE ela e o espectador
+    // e por isso é desenhado na camada da frente (part 'front'), em altura cheia.
+    const bx = x + 5, by = up ? y + 24 : y + 5, bw = 22, bd = 5,
+          bh = hOverride != null ? hOverride : (up ? 8 : 14), sg = up ? -1 : 1;
     castShadow(c, bx, by, bw, bd, bh);
     for (let i = 0; i < bw; i++) {
       const u = i / (bw - 1), cv = Math.round(2 * Math.pow(2 * u - 1, 2)) * sg;
@@ -621,11 +626,18 @@ function drawChair(c, tx, ty, facing, col = '#2b3346') {
       rect(c, ax + aw - 1, ay, 1, ah, shade(ac, -0.35));
     };
     if (facing === 'down' || facing === 'up') { const ay = facing === 'up' ? y + 12 : y + 10; arm(x + 5, ay, 3, 10); arm(x + 24, ay, 3, 10); }
-    // vistas laterais: sem braços (ficariam como barras em volta do corpo)
+    // vistas laterais: uma barra curta na borda sul do assento — é o único pedaço
+    // de cadeira que o corpo de perfil não cobre, e serve de pista de que há cadeira.
+    else arm(x + 9, y + 23, 14, 3);
   };
-  if (facing === 'down') { backH(); seat(); arms(); }
-  else if (facing === 'up') { seat(); arms(); backH(); }
-  else { seat(); arms(); backV(); }
+
+  // Camada da FRENTE: só as peças que devem ocluir quem está sentado.
+  if (part === 'front') { if (facing === 'up') backH(14); arms(); return; }
+
+  base();
+  if (facing === 'down') { backH(); seat(); }
+  else if (facing === 'up') { seat(); }
+  else { seat(); backV(); }
 }
 
 /**
@@ -1509,9 +1521,25 @@ function placePlant(tx, ty) {
 }
 /** key: sobrescreve a ordem (ex.: itens de parede desenham antes de tudo). */
 function placeDecor(tx, ty, w, h, fn, key) { blockRect(tx, ty, w, h); pushFurn(key != null ? key : (ty + h) * TILE, fn); }
+// Cor de cada cadeira, para a camada da frente desenhar igual à de trás.
+const chairColors = new Map();
+
 function placeChair(zoneId, tx, ty, facing, col) {
   addSeat(zoneId, tx, ty, facing);
+  chairColors.set(tx + ',' + ty, col);
   pushFurn((ty + 1) * TILE, (c) => drawChair(c, tx, ty, facing, col));
+}
+
+/**
+ * Desenha as peças da cadeira que ficam NA FRENTE de quem está sentado.
+ * O chamador (main.js) invoca logo depois de desenhar o personagem daquele
+ * assento, para o y-sort continuar valendo. Sem ocupante, não chamar.
+ */
+export function drawSeatFront(c, seat) {
+  if (!seat) return;
+  const col = chairColors.get(seat.tx + ',' + seat.ty);
+  if (!col) return;                       // assento sem cadeira registrada
+  drawChair(c, seat.tx, seat.ty, seat.facing, col, 'front');
 }
 
 const LAMP = '#ffd9a0', SCREEN = '#7fb4ff', WINDOW = '#bcd8ff';

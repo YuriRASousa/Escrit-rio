@@ -1,7 +1,7 @@
 // Orquestração do frontend: canvas, câmera, game loop e ciclo de vida dos
 // personagens a partir do store. Cola office.js (cenário) com characters.js (gente).
 
-import { TILE, OFFICE, WORLD_W, WORLD_H, renderFloor, renderOverlay, renderZoneLabels, zoneForTeam, freeSeat }
+import { TILE, OFFICE, WORLD_W, WORLD_H, renderFloor, renderOverlay, renderZoneLabels, zoneForTeam, freeSeat, drawSeatFront }
   from './office.js';
 import { Character } from './characters.js';
 import { renderLightLayer } from './lighting.js';
@@ -129,7 +129,12 @@ function frame(now) {
 
   // y-sort: quem está mais embaixo desenha por cima
   const sorted = [...characters.values()].sort((a, b) => a.y - b.y);
-  for (const ch of sorted) ch.draw(ctx);
+  for (const ch of sorted) {
+    ch.draw(ctx);
+    // Peças da cadeira que ficam na frente de quem senta (encosto na vista de
+    // costas, braços). Vai logo depois do próprio ocupante para não furar o y-sort.
+    if (ch.seated && ch.seat) drawSeatFront(ctx, ch.seat);
+  }
 
   renderOverlay(ctx);
   renderLightLayer(ctx, now);   // luz e vinheta por cima da cena, antes da UI

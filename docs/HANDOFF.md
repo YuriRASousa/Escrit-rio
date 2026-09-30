@@ -147,6 +147,57 @@ só serve para `sprites.js`, não para `characters.js`/`office.js`).
    agentes nele ao mesmo tempo se sobrescrevem. Rode em sequência, um dono por
    vez, e confira `git fetch` antes de commitar.
 
+## 7b. Rodada do canal da nuvem — cadeira sob quem senta
+
+**Sintoma:** o usuário reportou que o personagem sentado continuava sem cadeira.
+A mitigação anterior (alargar o encosto para 22px esperando que sobrasse borda)
+partia de uma premissa errada.
+
+**Medição que fechou o diagnóstico** (sprite sentado na escala real do jogo, scale 1):
+
+| | largura | altura |
+|---|---|---|
+| silhueta do sprite sentado | 30px (x de -14 a +15) | 42px |
+| encosto da cadeira | 22px (x de -11 a +11) | — |
+
+O encosto cabe INTEIRO dentro da silhueta. Alargar nunca resolveria sem invadir
+os tiles vizinhos: **o problema era de ordem de desenho, não de tamanho.**
+
+**Correção:** a cadeira foi dividida em duas camadas.
+- `drawChair(c, tx, ty, facing, col, part)` aceita `part` = `'back'` (padrão) ou
+  `'front'`.
+- `'front'` desenha só o que deve ocluir quem está sentado: na vista de costas
+  (`facing: 'up'`) o encosto inteiro, em altura cheia (14px, não mais 8px); nas
+  demais, os braços; nas laterais, uma barra curta na borda sul.
+- `office.js` exporta **`drawSeatFront(ctx, seat)`**, e `main.js` chama logo depois
+  de desenhar o ocupante daquele assento, dentro do laço já ordenado por y:
+
+```js
+for (const ch of sorted) {
+  ch.draw(ctx);
+  if (ch.seated && ch.seat) drawSeatFront(ctx, ch.seat);
+}
+```
+
+**INVARIANTE NOVA:** `drawSeatFront` tem de ser chamado imediatamente após o
+personagem daquele assento. Chamar em bloco, depois de todos, fura o y-sort e a
+cadeira passa a cobrir quem está na frente.
+
+**Ganho medido** (pixels de cadeira que a camada da frente torna visíveis, janela
+de 4x4 tiles): `up` 550px, `down` 106px, `left`/`right` 84px cada. A vista de
+costas, que era a pior, virou a mais beneficiada.
+
+Invariantes conferidos depois da mudança: 62 assentos, 0 fora do caminhável,
+86 luzes, 1179 caminháveis — todos iguais aos de antes. `measure.mjs` passa nas
+11 poses, determinismo 0.
+
+**Observação não corrigida de propósito:** com o tronco agora coberto pelo
+encosto na vista de costas, a nuca passou a carregar a leitura sozinha e aparece
+como um bloco de cor chapada. No zoom real do jogo fica aceitável, então não
+mexi — `sprites.js` é do outro canal e alterar desenho lá arriscaria os limiares
+do `measure.mjs`. Se for tratar, o caminho é dar detalhe interno ao cabelo na
+vista `up` (risca, mecha ou variação de tom), sem tocar na ordem do PRNG.
+
 ## 8. Pendências conhecidas
 
 - **Cabeças de personagens carecas** ficam parecidas entre si: o estilo `bald`
