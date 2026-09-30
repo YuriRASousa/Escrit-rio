@@ -83,7 +83,10 @@ export const OFFICE = {
   zones: Zone[],                        // salas/times
   seats: Seat[],                        // mesas onde personagens sentam
 };
-// Zone = { id, name, x, y, w, h, color, kind: "team"|"meeting"|"lounge"|"kitchen" }
+// Zone = { id, name, x, y, w, h, color, kind: "team"|"meeting"|"lounge"|"server"|"kitchen" }
+//   "kitchen" não é mais usado no mapa atual (a copa virou "server", a sala de
+//   servidores/NOC). O behaviors.js ainda procura "kitchen" primeiro e cai no
+//   "lounge", onde ficou a máquina de café.
 // Seat = { id, zoneId, tx, ty, facing: "up"|"down"|"left"|"right" }
 //   tx,ty = tile onde o personagem FICA EM PÉ/SENTA (deve ser walkable)
 

@@ -141,7 +141,7 @@ const ZONE_DEFS = [
   { id: 'house',  name: 'Housekeeping Team',  x: 32, y: 0,  w: 18, h: 13, color: '#9b6bd1', kind: 'team' },
   { id: 'board',  name: 'Boardroom',          x: 0,  y: 16, w: 21, h: 18, color: '#d0566e', kind: 'meeting' },
   { id: 'lounge', name: 'Lounge',             x: 20, y: 16, w: 15, h: 18, color: '#e0964a', kind: 'lounge' },
-  { id: 'copa',   name: 'Copa',               x: 34, y: 16, w: 16, h: 18, color: '#48a8c0', kind: 'kitchen' },
+  { id: 'copa',   name: 'NOC',                x: 34, y: 16, w: 16, h: 18, color: '#39c5d6', kind: 'server' }, // Sala de Servidores / NOC
 ];
 
 const zones = ZONE_DEFS.map((z) => ({ ...z }));
@@ -249,22 +249,6 @@ function drawCarpetTile(c, tx, ty, col) {
   for (let i = 0; i < 22; i++) {
     const hx = Math.floor(hash(tx * 31 + i, ty, 1) * 30), hy = Math.floor(hash(tx, ty * 31 + i, 2) * 31);
     rect(c, x + hx, y + hy, 2, 1, hash(i, tx + ty, 3) > 0.5 ? shade(col, 0.13) : shade(col, -0.13));
-  }
-}
-
-/** Piso de azulejo xadrez (copa) com brilho de cerâmica. */
-function drawCheckerTile(c, tx, ty) {
-  const x = tx * TILE, y = ty * TILE;
-  for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) {
-    const dark = ((tx * 2 + i + ty * 2 + j) & 1) === 0;
-    rect(c, x + i * 16, y + j * 16, 16, 16, dark ? '#5d7f80' : '#6b8f90');
-    rect(c, x + i * 16, y + j * 16, 16, 1, 'rgba(255,255,255,0.10)');
-    rect(c, x + i * 16, y + j * 16, 1, 16, 'rgba(255,255,255,0.06)');   // quina esquerda clara
-    rect(c, x + i * 16, y + j * 16 + 15, 16, 1, 'rgba(0,0,0,0.16)');
-    rect(c, x + i * 16 + 15, y + j * 16, 1, 16, 'rgba(0,0,0,0.10)');    // quina direita escura
-    if (hash(tx * 2 + i, ty * 2 + j, 35) > 0.7) { // reflexo diagonal de cerâmica
-      for (let k = 0; k < 5; k++) rect(c, x + i * 16 + 3 + k, y + j * 16 + 8 - k, 2, 1, 'rgba(255,255,255,0.10)');
-    }
   }
 }
 
@@ -593,7 +577,10 @@ function drawChair(c, tx, ty, facing, col = '#2b3346') {
   const bc = shade(col, 0.06);
   const backH = () => {                                                                   // encosto horizontal (down/up)
     const up = facing === 'up';
-    const bx = x + 8, by = up ? y + 24 : y + 5, bw = 16, bd = 5, bh = up ? 8 : 14, sg = up ? -1 : 1;
+    // 22px de largura contra os 16px do tronco do sprite: sobram ~3px de encosto
+    // aparecendo de cada lado de quem está sentado. Com 16px o corpo cobria o
+    // encosto inteiro e a cadeira sumia embaixo do personagem.
+    const bx = x + 5, by = up ? y + 24 : y + 5, bw = 22, bd = 5, bh = up ? 8 : 14, sg = up ? -1 : 1;
     castShadow(c, bx, by, bw, bd, bh);
     for (let i = 0; i < bw; i++) {
       const u = i / (bw - 1), cv = Math.round(2 * Math.pow(2 * u - 1, 2)) * sg;
@@ -960,36 +947,6 @@ function drawCoffeeTable(c, tx, ty, w, h) {
   disc(c, x + 34, t + 8, 2, '#f4a1c8'); rect(c, x + 34, t + 8, 1, 1, '#ffd58a');
 }
 
-/** Mesa de jantar da copa (altura 10): madeira clara com veios, pés torneados, pratos com talheres, copos e centro de mesa. */
-function drawDiningTable(c, tx, ty, w, h) {
-  const x = tx * TILE, y = ty * TILE, W = w * TILE, H = h * TILE, HT = 10;
-  box(c, x, y + 2, W, H - 4, HT, '#8a6440', { top: '#d8b07c' });
-  const yy = y - 12;                                // "y antigo" do tampo
-  rect(c, x + 2, y - 8 + 1, W - 4, 1, '#ecc998');
-  for (let i = 0; i < 6; i++) rect(c, x + 4, yy + 8 + i * 6, W - 8, 1, 'rgba(120,80,40,0.16)'); // veios
-  for (let i = 0; i < 10; i++) rect(c, x + 6 + Math.floor(hash(i, tx, 96) * (W - 24)), yy + 9 + Math.floor(hash(i, ty, 97) * (H - 20)), 8 + Math.floor(hash(i, 2, 98) * 10), 1, 'rgba(255,240,210,0.30)');
-  fade(c, x + 2, y - 8, W - 4, 8, 'down', 0.10, '255,240,210');
-  // frente: aro de madeira e pés torneados
-  const fy = y + 2 + (H - 4) - HT;
-  rect(c, x, fy, W, 2, '#b98a58'); rect(c, x, fy, W, 1, '#e8c894');
-  rect(c, x + 5, fy + 2, W - 10, 3, '#5a3d24');
-  for (const lx of [x + 1, x + W - 7]) { rect(c, lx, fy + 2, 6, 8, '#6a4a2c'); rect(c, lx, fy + 2, 1, 8, '#9a7248'); rect(c, lx + 5, fy + 2, 1, 8, '#3d2814'); rect(c, lx + 1, fy + 5, 4, 1, '#3d2814'); }
-  const plate = (px, py) => {
-    disc(c, px + 2, py + 2, 5, 'rgba(0,0,0,0.20)');
-    disc(c, px, py, 5, '#dfe5ee'); disc(c, px, py, 4, '#f4f6fa'); disc(c, px, py, 2, '#e6ebf3');
-    rect(c, px - 3, py - 4, 3, 1, '#ffffff');
-    rect(c, px - 8, py - 2, 1, 5, '#b6bfce'); rect(c, px + 7, py - 2, 1, 5, '#b6bfce');   // talheres
-  };
-  for (let i = 0; i < 3; i++) { plate(x + 20 + i * 36, yy + 16); plate(x + 20 + i * 36, yy + H - 18); }
-  // copos
-  for (let i = 0; i < 2; i++) { const gx = x + 40 + i * 36; rect(c, gx + 1, yy + H / 2 + 2, 4, 4, 'rgba(0,0,0,0.20)'); rect(c, gx, yy + H / 2 + 1, 4, 4, 'rgba(180,220,240,0.7)'); rect(c, gx, yy + H / 2 + 1, 1, 4, '#ffffff'); }
-  // centro de mesa: vaso com flor (topo) sobre toalhinha
-  rect(c, x + W / 2 - 4, yy + H / 2 - 4, 12, 12, 'rgba(0,0,0,0.12)');
-  rect(c, x + W / 2 - 5, yy + H / 2 - 5, 12, 12, '#e8e4d8'); rect(c, x + W / 2 - 5, yy + H / 2 - 5, 12, 1, '#fff'); rect(c, x + W / 2 - 3, yy + H / 2 - 3, 8, 8, '#d9534f');
-  rect(c, x + W / 2 - 3, yy + H / 2 - 3, 8, 1, '#f08a86');
-  disc(c, x + W / 2 + 1, yy + H / 2 + 1, 2, '#ffd58a');
-}
-
 /**
  * Geladeira (1x2), altura 18: topo com respiros e face frontal com portas,
  * puxadores com brilho, painel do freezer, ímãs, bilhete, logotipo e pezinhos.
@@ -1084,6 +1041,459 @@ function drawBench(c, tx, ty, w) {
 }
 
 // ---------------------------------------------------------------------------
+// Sala de Servidores / NOC (piso técnico, racks, videowall, mesas de operação)
+// ---------------------------------------------------------------------------
+
+/** Micro-fonte 3x5 (só o que a sala usa): etiquetas dos racks e plaquinhas. */
+const GLYPH = {
+  0: ['111', '101', '101', '101', '111'], 1: ['010', '110', '010', '010', '111'],
+  2: ['111', '001', '111', '100', '111'], 3: ['111', '001', '111', '001', '111'],
+  4: ['101', '101', '111', '001', '001'], 5: ['111', '100', '111', '001', '111'],
+  6: ['111', '100', '111', '101', '111'], 7: ['111', '001', '010', '010', '010'],
+  8: ['111', '101', '111', '101', '111'], 9: ['111', '101', '111', '001', '111'],
+  A: ['010', '101', '111', '101', '101'], B: ['110', '101', '110', '101', '110'],
+  C: ['011', '100', '100', '100', '011'], N: ['110', '101', '101', '101', '101'],
+  O: ['010', '101', '101', '101', '010'], P: ['110', '101', '110', '100', '100'],
+  R: ['110', '101', '110', '101', '101'], S: ['011', '100', '010', '001', '110'],
+  U: ['101', '101', '101', '101', '111'],
+};
+/** Texto de 1px por pixel-de-fonte (4px por caractere). */
+function microText(c, x, y, str, col) {
+  c.fillStyle = col;
+  for (let i = 0; i < str.length; i++) {
+    const g = GLYPH[str[i]];
+    if (!g) continue;
+    for (let r = 0; r < 5; r++) for (let k = 0; k < 3; k++) if (g[r][k] === '1') c.fillRect(x + i * 4 + k, y + r, 1, 1);
+  }
+}
+
+const CABLE_COLS = ['#3b82f6', '#f2c14e', '#e5534b', '#3fbf7a', '#e8ecf5', '#ff9a3c', '#b57bff'];
+const DASH = { bg: '#0a1322', grid: '#15243c', cyan: '#4fd8ff', green: '#5be08a', amber: '#ffb040', red: '#ff5a52', blue: '#3b78e0', dim: '#2a3f66' };
+
+/** Cor do LED de um slot (determinística: usada no desenho E na posição das luzes). */
+function ledCol(a, b, j, k) {
+  const v = hash(a * 7 + j, b * 5 + k, 190);
+  return v < 0.62 ? '#5cff8a' : v < 0.82 ? '#58b4ff' : v < 0.95 ? '#ffb43a' : '#ff4b47';
+}
+
+/** Posições (mundo) das luzes de LED de um rack: em sincronia com drawRack. */
+function rackLightSpots(tx, ty, type) {
+  if (type === 'ups') return [{ x: tx * TILE + 11, y: ty * TILE + 21, col: '#4dffb0' }];
+  return [0, 2].map((j) => ({ x: tx * TILE + 23, y: ty * TILE + 17 + j * 4, col: ledCol(tx, ty, j, 0) }));
+}
+
+/**
+ * Piso técnico (placas elevadas de 1 tile): junta escura, chanfro de luz em cima/esquerda,
+ * parafusos nos cantos, riscos leves. Na aleia fria (entre as fileiras de racks) as
+ * placas são perfuradas (grelha) com um leve tom azul de ar frio.
+ */
+function drawRaisedFloorTile(c, tx, ty) {
+  const x = tx * TILE, y = ty * TILE;
+  const v = hash(tx, ty, 141);
+  const base = v < 0.33 ? '#4f596c' : v < 0.66 ? '#535d72' : '#4b5568';
+  rect(c, x, y, TILE, TILE, '#262d3c');                        // junta entre placas
+  rect(c, x + 1, y + 1, TILE - 2, TILE - 2, base);
+  rect(c, x + 1, y + 1, TILE - 2, 1, '#6f7b93');               // quina de cima (luz)
+  rect(c, x + 1, y + 1, 1, TILE - 2, '#606c84');               // quina da esquerda
+  rect(c, x + 1, y + TILE - 2, TILE - 2, 1, '#333b4e');        // quina de baixo (sombra)
+  rect(c, x + TILE - 2, y + 1, 1, TILE - 2, '#3a4358');        // quina da direita
+  const perf = ty >= 26 && ty <= 28 && tx >= 36 && tx <= 47;
+  if (perf) {
+    for (let j = 0; j < 6; j++) {
+      for (let i = 0; i < 6; i++) {
+        const hx = x + 4 + i * 4, hy = y + 4 + j * 4;
+        rect(c, hx, hy, 2, 2, '#161b28'); rect(c, hx, hy + 2, 2, 1, '#6a768d');
+      }
+    }
+    rect(c, x + 1, y + 1, TILE - 2, TILE - 2, 'rgba(80,190,255,0.07)');
+  } else {
+    for (const [sx, sy] of [[4, 4], [TILE - 6, 4], [4, TILE - 6], [TILE - 6, TILE - 6]]) {
+      rect(c, sx + x, sy + y, 2, 2, '#39435a'); rect(c, sx + x, sy + y, 1, 1, '#8592ab');
+    }
+    for (let i = 0; i < 3; i++) {
+      rect(c, x + 6 + Math.floor(hash(tx * 3 + i, ty, 142) * 16), y + 7 + Math.floor(hash(tx, ty * 3 + i, 143) * 16), 4 + i * 2, 1, 'rgba(255,255,255,0.05)');
+    }
+    if (hash(tx, ty, 144) > 0.8) rect(c, x + 10, y + 12, 12, 8, 'rgba(0,0,0,0.05)');
+  }
+}
+
+/**
+ * Conteúdo de uma tela de painel de NOC (x,y,w,h). kind: 0 matriz de status,
+ * 1 linha, 2 barras, 3 mapa, 4 logs, 5 medidores, 6 topologia, 7 alertas.
+ */
+function drawDashScreen(c, x, y, w, h, kind, seed) {
+  rect(c, x, y, w, h, DASH.bg);
+  c.save();
+  c.beginPath(); c.rect(x, y, w, h); c.clip();
+  if (kind === 0) {
+    for (let j = 0; j < Math.floor((h - 1) / 3); j++) {
+      for (let i = 0; i < Math.floor((w - 1) / 3); i++) {
+        const v = hash(i, j, seed + 160);
+        rect(c, x + 1 + i * 3, y + 1 + j * 3, 2, 2, v < 0.82 ? DASH.green : v < 0.94 ? DASH.amber : DASH.red);
+      }
+    }
+  } else if (kind === 1) {
+    for (let gy = 2; gy < h - 1; gy += 3) rect(c, x + 1, y + gy, w - 2, 1, DASH.grid);
+    for (let i = 0; i < w - 2; i++) {
+      const v = Math.max(0.1, Math.min(0.95, 0.5 + 0.3 * Math.sin(i * 0.33 + seed) + (hash(i, seed, 162) - 0.5) * 0.35));
+      const yy = y + h - 2 - Math.round(v * (h - 4));
+      rect(c, x + 1 + i, yy + 1, 1, y + h - 1 - (yy + 1), 'rgba(79,216,255,0.18)');
+      rect(c, x + 1 + i, yy, 1, 1, DASH.cyan);
+    }
+  } else if (kind === 2) {
+    const n = Math.floor((w - 2) / 3);
+    for (let i = 0; i < n; i++) {
+      const bh = 1 + Math.floor(hash(i, seed, 161) * (h - 3));
+      rect(c, x + 1 + i * 3, y + h - 1 - bh, 2, bh, bh > h - 4 ? DASH.red : i % 3 === 0 ? DASH.blue : DASH.cyan);
+    }
+  } else if (kind === 3) {
+    const nb = Math.max(4, Math.floor(w / 5));
+    for (let k = 0; k < nb; k++) {
+      const cx = x + 3 + Math.floor(hash(k, seed, 163) * (w - 6)), cy = y + 2 + Math.floor(hash(k, seed, 164) * (h - 4));
+      const r = 1 + Math.floor(hash(k, seed, 165) * Math.max(1, h / 6));
+      disc(c, cx, cy, r, '#1f5a7d');
+      disc(c, cx - 1, cy - 1, Math.max(1, r - 1), '#2a7196');
+    }
+    const pins = [];
+    for (let k = 0; k < 4; k++) pins.push([x + 3 + Math.floor(hash(k, seed, 166) * (w - 6)), y + 2 + Math.floor(hash(k, seed, 167) * (h - 4))]);
+    for (let k = 0; k < 3; k++) line(c, pins[k][0], pins[k][1], pins[k + 1][0], pins[k + 1][1], 'rgba(255,176,64,0.55)');
+    pins.forEach((p, k) => { rect(c, p[0] - 1, p[1] - 1, 3, 3, 'rgba(255,90,82,0.35)'); rect(c, p[0], p[1], 1, 1, k === 2 ? DASH.amber : k === 1 ? DASH.green : DASH.red); });
+  } else if (kind === 4) {
+    for (let j = 0; j < Math.floor((h - 1) / 2); j++) {
+      const len = 3 + Math.floor(hash(j, seed, 168) * (w - 10));
+      const v = hash(j, seed, 169);
+      rect(c, x + 1, y + 1 + j * 2, 3, 1, DASH.dim);
+      rect(c, x + 5, y + 1 + j * 2, Math.min(len, w - 6), 1, v > 0.9 ? DASH.red : v > 0.75 ? DASH.amber : '#2f8f55');
+    }
+  } else if (kind === 5) {
+    const r = Math.max(3, Math.min(Math.floor(h / 2) - 1, 7));
+    const gauges = w >= 30 ? 2 : 1;
+    for (let g = 0; g < gauges; g++) {
+      const cx = x + r + 2 + g * (r * 2 + 4), cy = y + Math.floor(h / 2);
+      disc(c, cx, cy, r, DASH.dim); disc(c, cx, cy, r - 1, DASH.bg);
+      const pct = 0.35 + hash(g, seed, 170) * 0.6;
+      for (let k = 0; k <= 26; k++) {
+        const a = -Math.PI / 2 + (k / 26) * 2 * Math.PI * pct;
+        rect(c, cx + Math.round(Math.cos(a) * (r - 0.5)), cy + Math.round(Math.sin(a) * (r - 0.5)), 1, 1, pct > 0.85 ? DASH.red : pct > 0.7 ? DASH.amber : DASH.green);
+      }
+      rect(c, cx - 1, cy, 2, 1, '#c9d3e6');
+    }
+    if (w >= 44) { rect(c, x + w - 10, y + 2, 8, 1, DASH.cyan); rect(c, x + w - 10, y + 5, 6, 1, DASH.dim); rect(c, x + w - 10, y + 8, 7, 1, DASH.dim); }
+  } else if (kind === 6) {
+    const nodes = [];
+    for (let k = 0; k < 6; k++) nodes.push([x + 3 + Math.floor(hash(k, seed, 171) * (w - 7)), y + 2 + Math.floor(hash(k, seed, 172) * (h - 5))]);
+    const hub = [x + Math.floor(w / 2), y + Math.floor(h / 2)];
+    nodes.forEach((n) => line(c, hub[0], hub[1], n[0], n[1], '#2a5a80'));
+    nodes.forEach((n, k) => rect(c, n[0], n[1], 2, 2, k === 4 ? DASH.red : k === 2 ? DASH.amber : DASH.green));
+    rect(c, hub[0] - 1, hub[1] - 1, 3, 3, DASH.cyan);
+  } else {
+    for (let j = 0; j < Math.floor((h - 1) / 3); j++) {
+      const hot = hash(j, seed, 173) > 0.5;
+      rect(c, x + 1, y + 1 + j * 3, w - 2, 2, hot ? '#4a1a1d' : '#3d3212');
+      rect(c, x + 1, y + 1 + j * 3, 2, 2, hot ? DASH.red : DASH.amber);
+      rect(c, x + 5, y + 1 + j * 3, Math.max(2, Math.floor((w - 10) * hash(j, seed, 174))), 1, hot ? '#ff9c96' : '#ffd58a');
+    }
+  }
+  c.restore();
+  rect(c, x, y, w, 1, 'rgba(255,255,255,0.10)');
+  fade(c, x, y + h - 3, w, 3, 'up', 0.16, '120,190,255');                         // retroiluminação
+  for (let k = 0; k < Math.min(h - 3, 7); k++) rect(c, x + Math.floor(w / 2) + k * 2, y + h - 2 - k, 2, 1, 'rgba(255,255,255,0.12)'); // reflexo de vidro
+}
+
+/**
+ * Videowall montado na parede (8 colunas x 2 linhas com um mapa 2x2 no centro).
+ * A moldura passa dos 20px da face da parede e invade ~20px do primeiro tile do piso
+ * (esse tile é bloqueado): é um painel espesso, com sombra caindo para baixo-direita.
+ */
+function drawVideoWall(c, tx, ty, w) {
+  const x = tx * TILE + 2, W = w * TILE - 4, y = ty * TILE - 19, Hh = 41;
+  rect(c, x + 3, y + 3, W, Hh, 'rgba(0,0,0,0.34)');
+  rect(c, x, y, W, Hh, '#0b0e15');
+  rect(c, x, y, W, 1, '#3a4358'); rect(c, x, y, 1, Hh, '#2a3244');
+  rect(c, x + W - 1, y, 1, Hh, '#05070b'); rect(c, x, y + Hh - 1, W, 1, '#05070b');
+  const cols = 8, gx = 1, cw = (W - 6 - (cols - 1) * gx) / cols;
+  const cx0 = (i) => x + 3 + Math.round(i * (cw + gx));
+  const spans = [ // [col, row, colSpan, rowSpan, kind, seed]
+    [0, 0, 1, 1, 0, 1], [1, 0, 1, 1, 1, 2], [2, 0, 1, 1, 2, 3], [3, 0, 2, 2, 3, 4], [5, 0, 1, 1, 1, 5], [6, 0, 1, 1, 0, 6], [7, 0, 1, 1, 5, 7],
+    [0, 1, 1, 1, 4, 8], [1, 1, 1, 1, 6, 9], [2, 1, 1, 1, 5, 10], [5, 1, 1, 1, 2, 11], [6, 1, 1, 1, 4, 12], [7, 1, 1, 1, 7, 13],
+  ];
+  for (const [col, row, cs, rs, kind, seed] of spans) {
+    const sx = cx0(col), ex = cx0(col + cs) - gx;
+    const sy = y + 3 + row * 16, sh = rs * 15 + (rs - 1);
+    rect(c, sx - 1, sy - 1, ex - sx + 2, sh + 2, '#05070b');                     // bisel de cada monitor
+    drawDashScreen(c, sx, sy, ex - sx, sh, kind, seed + w);
+  }
+  // reflexo de vidro em faixas diagonais atravessando o painel todo
+  for (let k = 0; k < 4; k++) for (let yy = 3; yy < 35; yy++) rect(c, x + 30 + k * 72 + (35 - yy), y + yy, 5, 1, 'rgba(255,255,255,0.045)');
+  // trilho inferior: plaquinha, LEDs de status e ventilação
+  rect(c, x + 1, y + 35, W - 2, 5, '#161b26'); rect(c, x + 1, y + 35, W - 2, 1, '#2a3244');
+  microText(c, x + 6, y + 35, 'NOC', '#7fb4ff');
+  for (let k = 0; k < 10; k++) rect(c, x + 26 + k * 4, y + 37, 2, 1, k === 7 ? DASH.amber : k === 3 ? '#4fd8ff' : DASH.green);
+  for (let k = 0; k < 14; k++) rect(c, x + W - 62 + k * 4, y + 37, 2, 1, '#0b0e15');
+}
+
+/** Monitor de posto de operação (26x13 + pedestal): tela de painel com brilho e reflexo. */
+function drawNocMonitor(c, x, y, seed) {
+  rect(c, x + 9, y + 15, 10, 1, 'rgba(0,0,0,0.25)');
+  rect(c, x + 9, y + 13, 8, 2, '#4a5163'); rect(c, x + 9, y + 13, 8, 1, '#8a93a5'); rect(c, x + 16, y + 13, 1, 2, '#2a2f3b');   // pedestal
+  rect(c, x + 3, y + 3, 26, 13, 'rgba(0,0,0,0.20)');
+  rect(c, x, y, 26, 13, '#141821');
+  rect(c, x, y, 26, 1, '#38405a'); rect(c, x, y, 1, 13, '#2b3245');
+  rect(c, x + 25, y, 1, 13, '#0a0c12'); rect(c, x, y + 12, 26, 1, '#0a0c12');
+  rect(c, x + 23, y + 12, 1, 1, '#4ade80');
+  drawDashScreen(c, x + 1, y + 1, 24, 11, Math.floor(hash(seed, 2, 175) * 8), seed);
+}
+
+/**
+ * Mesa de operação (w postos), altura 10: tampo de metal escuro com escovado,
+ * faixa frontal clara, avental, pés, LED ciano sob a borda; por posto: monitor de NOC,
+ * teclado, mouse e, às vezes, caneca e post-it. A pessoa senta ABAIXO, de frente para a mesa.
+ */
+function drawOpsDesk(c, tx, ty, w, seed) {
+  const x = tx * TILE, W = w * TILE, H = 10;
+  const y0 = ty * TILE + 2, D = 28;
+  const t = ty * TILE - H;
+  box(c, x, y0, W, D, H, '#2a3142', { top: '#39435a' });
+  for (let i = 0; i < 6 * w; i++) {
+    rect(c, x + 3 + Math.floor(hash(i, tx, 151) * (W - 12)), t + 3 + Math.floor(hash(i, ty, 152) * 25), 4 + Math.floor(hash(i, seed, 153) * 10), 1, hash(i, tx, 154) > 0.5 ? '#333c52' : '#44506a');
+  }
+  rect(c, x + 1, t + 1, W - 2, 1, '#6b7896');
+  fade(c, x + 1, t + 14, W - 2, 16, 'up', 0.12, '60,80,120');
+  for (let i = 1; i < w; i++) { rect(c, x + i * TILE, t + 2, 1, 28, '#232a3a'); rect(c, x + i * TILE + 1, t + 2, 1, 28, '#4a5670'); }
+  // frente: fita clara, avental com LED ciano e pés metálicos
+  const fy = y0 + D - H;
+  rect(c, x, fy, W, 2, '#6a7692'); rect(c, x, fy, W, 1, '#93a0bd'); rect(c, x, fy + 1, W, 1, '#4d5872');
+  rect(c, x + 3, fy + 2, W - 6, 6, '#1c2130'); rect(c, x + 3, fy + 2, W - 6, 1, '#0d1018');
+  rect(c, x + 5, fy + 8, W - 10, 1, '#39c5d6');
+  fade(c, x + 5, fy + 9, W - 10, 1, 'down', 0.4, '57,197,214');
+  for (const lx of [x, x + W - 4]) {
+    rect(c, lx, fy + 2, 4, 8, '#2a2f3b'); rect(c, lx, fy + 2, 1, 8, '#5b647a'); rect(c, lx + 3, fy + 2, 1, 8, '#171a22'); rect(c, lx, fy + 9, 4, 1, '#0d0f14');
+  }
+  // cabos descendo pela frente (organizados em calha)
+  const cx = x + W - 12;
+  rect(c, cx, fy + 2, 3, 8, '#12151c'); rect(c, cx, fy + 3, 1, 6, '#3b82f6'); rect(c, cx + 1, fy + 3, 1, 6, '#f2c14e');
+  const padCols = ['#3a4257', '#2f4a4a', '#3a3f57'];
+  const mugCols = ['#d94f4f', '#3b78e0', '#f2c14e', '#f4f6fa'];
+  for (let i = 0; i < w; i++) {
+    const ox = x + i * TILE, s = seed + i * 3;
+    drawNocMonitor(c, ox + 3, t + 3, s);
+    keyboard(c, ox + 2, t + 19);
+    mousePad(c, ox + 20, t + 18, padCols[Math.floor(hash(s, 7, 155) * padCols.length)]);
+    if (hash(s, 8, 156) > 0.5) mug(c, ox + 2, t + 24, mugCols[Math.floor(hash(s, 9, 157) * mugCols.length)]);
+    else postIt(c, ox + 25, t + 1, ['#ffe066', '#ff9ecb', '#8fe3a5'][Math.floor(hash(s, 10, 158) * 3)]);
+  }
+}
+
+/** Rack de servidor (1 tile), altura 24: topo com calha de cabos, frente com etiqueta e 3 slots (srv/net/stor) ou UPS. */
+function drawRack(c, tx, ty, type, tag, seed, tagCol) {
+  const x = tx * TILE + 1, W = 30, D = 18, H = 24;
+  const y0 = ty * TILE + 12, t = y0 - H, fy = y0 + D - H;
+  box(c, x, y0, W, D, H, '#232937', { top: '#46506a' });
+  // --- topo: calha (escada) de cabos com feixe colorido atravessando as juntas + respiros
+  rect(c, x + 2, t + 2, W - 4, D - 4, '#39435a'); rect(c, x + 2, t + 2, W - 4, 1, '#5d6a88');
+  for (let k = 0; k < 3; k++) rect(c, x + 5 + k * 8, t + 4, 5, 1, '#171b25');
+  rect(c, x - 1, t + 8, W + 2, 1, '#8792a8'); rect(c, x - 1, t + 14, W + 2, 1, '#5b657b');
+  for (let k = 2; k < W - 2; k += 4) rect(c, x + k, t + 9, 1, 5, '#465068');
+  const cc = CABLE_COLS[Math.floor(hash(tx, ty, 181) * CABLE_COLS.length)];
+  rect(c, x - 1, t + 10, W + 2, 2, cc); rect(c, x - 1, t + 10, W + 2, 1, shade(cc, 0.3)); rect(c, x - 1, t + 12, W + 2, 1, shade(cc, -0.4));
+  // --- frente: moldura, etiqueta e slots
+  rect(c, x, fy, W, H, '#10141c');
+  rect(c, x, fy, 1, H, '#3a4358'); rect(c, x + W - 1, fy, 1, H, '#080b10'); rect(c, x, fy, W, 1, '#2a3245');
+  rect(c, x + 2, fy + 2, W - 4, 7, '#e6eaf2'); rect(c, x + 2, fy + 2, W - 4, 1, '#ffffff'); rect(c, x + 2, fy + 8, W - 4, 1, '#a9b2c4');
+  rect(c, x + 2, fy + 2, 3, 7, tagCol); rect(c, x + 2, fy + 2, 3, 1, shade(tagCol, 0.35));
+  microText(c, x + 7, fy + 3, tag, '#1a1f2b');
+  for (let k = 0; k < 6; k++) if (hash(k, seed, 183) > 0.35) rect(c, x + 21 + k, fy + 3, 1, 5, '#1a1f2b');   // código de barras
+  const sx = x + 3;
+  if (type === 'ups') {
+    rect(c, sx, fy + 10, 24, 11, '#2b3244'); rect(c, sx, fy + 10, 24, 1, '#4d5873'); rect(c, sx, fy + 21, 24, 1, '#0a0d13');
+    rect(c, sx + 2, fy + 12, 10, 6, '#06231f'); rect(c, sx + 2, fy + 12, 10, 1, '#0d3a33');
+    for (let k = 0; k < 4; k++) rect(c, sx + 3 + k * 2, fy + 17 - (k + 1), 1, k + 1, '#4dffb0');
+    microText(c, sx + 13, fy + 12, 'UPS', '#c9d3e6');
+    for (let k = 0; k < 3; k++) rect(c, sx + 13 + k * 3, fy + 19, 2, 1, k === 2 ? '#ffb43a' : '#5cff8a');
+    for (let k = 0; k < 6; k++) rect(c, sx + 2 + k * 4, fy + 20, 3, 1, '#1a1f2b');
+  } else {
+    for (let j = 0; j < 3; j++) {
+      const sy = fy + 10 + j * 4;
+      rect(c, sx, sy + 3, 24, 1, '#0a0d13');                                       // separador entre slots
+      if (type === 'srv') {
+        rect(c, sx, sy, 24, 3, '#2e3548'); rect(c, sx, sy, 24, 1, '#4d5873');
+        for (let k = 0; k < 4; k++) { rect(c, sx + 1 + k * 4, sy + 1, 3, 2, '#141822'); rect(c, sx + 1 + k * 4, sy + 2, 3, 1, '#39425a'); }
+        rect(c, sx + 19, sy + 1, 1, 1, ledCol(tx, ty, j, 0)); rect(c, sx + 21, sy + 1, 1, 1, ledCol(tx, ty, j, 1));
+        rect(c, sx + 22, sy + 1, 2, 2, '#1c2130'); rect(c, sx + 22, sy + 1, 1, 1, '#8892aa');
+      } else if (type === 'net') {
+        if (j === 0) {                                                             // switch: 8 portas com LEDs
+          rect(c, sx, sy, 24, 3, '#2b3348');
+          for (let k = 0; k < 8; k++) {
+            rect(c, sx + k * 3, sy, 1, 1, hash(k, tx + ty, 184) > 0.3 ? '#5cff8a' : '#26324a');
+            const plug = hash(k, ty, 185) > 0.35;
+            rect(c, sx + k * 3, sy + 1, 2, 2, plug ? CABLE_COLS[Math.floor(hash(k, tx, 186) * CABLE_COLS.length)] : '#080b10');
+          }
+        } else if (j === 1) {                                                      // patch panel
+          rect(c, sx, sy, 24, 3, '#3a4256'); rect(c, sx, sy, 24, 1, '#5a6580');
+          for (let k = 0; k < 12; k++) rect(c, sx + 1 + k * 2, sy + 1, 1, 2, k % 5 === 4 ? '#0e1118' : CABLE_COLS[Math.floor(hash(k, tx + ty, 187) * CABLE_COLS.length)]);
+        } else {                                                                   // organizador com cabos em laço
+          rect(c, sx, sy, 24, 3, '#1c2131');
+          for (let k = 0; k < 6; k++) {
+            const col = CABLE_COLS[Math.floor(hash(k, tx * 3 + ty, 188) * CABLE_COLS.length)], lx = sx + 1 + k * 4;
+            rect(c, lx, sy, 1, 2, col); rect(c, lx + 1, sy + 2, 2, 1, col); rect(c, lx + 3, sy, 1, 2, shade(col, -0.25));
+          }
+        }
+      } else {                                                                     // storage: 6 baias de disco
+        rect(c, sx, sy, 24, 3, '#2b3245'); rect(c, sx, sy, 24, 1, '#4d5873');
+        for (let k = 0; k < 6; k++) {
+          rect(c, sx + k * 4, sy + 1, 3, 2, '#181d2b'); rect(c, sx + k * 4, sy + 2, 3, 1, '#4d5873');
+          const v = hash(k, tx * 5 + j, 189);
+          rect(c, sx + k * 4 + 2, sy + 1, 1, 1, v > 0.3 ? '#58b4ff' : v > 0.12 ? '#ffb43a' : '#26324a');
+        }
+      }
+    }
+  }
+  // plinto ventilado e reflexo de porta de vidro
+  rect(c, x + 2, fy + 22, W - 4, 2, '#0a0d13');
+  for (let k = 0; k < 7; k++) rect(c, x + 3 + k * 4, fy + 22, 2, 1, '#1e2433');
+  for (let k = 0; k < 9; k++) rect(c, x + 6 + k, fy + 20 - k, 1, 1, 'rgba(255,255,255,0.06)');
+  rect(c, x + W - 8, fy + 10, 1, 11, 'rgba(255,255,255,0.04)');
+}
+
+/** Ar-condicionado de precisão (CRAC, w tiles), altura 26: ventiladores no topo, grelha, LCD e botões na frente. */
+function drawCRAC(c, tx, ty, w) {
+  const x = tx * TILE + 2, W = w * TILE - 4, D = 22, H = 26;
+  const y0 = ty * TILE + 10, t = y0 - H, fy = y0 + D - H;
+  box(c, x, y0, W, D, H, '#c3cad8', { top: '#dde3ee' });
+  for (let i = 0; i < w; i++) {
+    const cx = x + Math.round((i + 0.5) * W / w), cy = t + 11;
+    disc(c, cx + 1, cy + 1, 9, 'rgba(0,0,0,0.22)');
+    disc(c, cx, cy, 9, '#8b95aa'); disc(c, cx, cy, 8, '#1a1f2b');
+    for (let b = 0; b < 5; b++) {
+      const a = b * 2 * Math.PI / 5 + 0.4;
+      line(c, cx, cy, Math.round(cx + Math.cos(a) * 7), Math.round(cy + Math.sin(a) * 7), b % 2 ? '#3a4358' : '#56617a');
+    }
+    disc(c, cx, cy, 2, '#7a86a0'); rect(c, cx - 1, cy - 1, 1, 1, '#c9d3e6');
+    rect(c, cx - 8, cy - 1, 1, 3, '#4d5873'); rect(c, cx + 8, cy - 1, 1, 3, '#4d5873');       // grade em cruz
+  }
+  // face frontal
+  rect(c, x, fy, W, H, '#b4bccb');
+  rect(c, x, fy, 2, H, '#d4dae6'); rect(c, x + W - 2, fy, 2, H, '#7b8598'); rect(c, x, fy, W, 1, '#e4e9f2');
+  const gw = Math.round(W * 0.58) - 3;
+  rect(c, x + 3, fy + 3, gw, 19, '#4d566a');
+  for (let k = 0; k < 6; k++) { rect(c, x + 3, fy + 3 + k * 3, gw, 1, '#2a3040'); rect(c, x + 3, fy + 4 + k * 3, gw, 1, '#8a94a8'); }
+  fade(c, x + 3, fy + 3, gw, 8, 'down', 0.25);
+  const px = x + 3 + gw + 3, pw = x + W - 3 - px;
+  rect(c, px, fy + 3, pw, 8, '#0b2a38'); rect(c, px, fy + 3, pw, 1, '#164a5e');
+  rect(c, px + 1, fy + 5, pw - 2, 1, DASH.cyan); rect(c, px + 1, fy + 7, Math.floor(pw / 2), 1, DASH.green); rect(c, px + 1, fy + 9, pw - 5, 1, DASH.amber);
+  for (let k = 0; k < 3; k++) { rect(c, px + k * 5, fy + 13, 4, 2, k === 2 ? '#39c5d6' : '#e8ecf5'); rect(c, px + k * 5, fy + 14, 4, 1, '#8a94a8'); }
+  rect(c, px, fy + 17, pw, 5, '#eef2f8'); microText(c, px + 1, fy + 17, 'CRAC', '#3a4358');
+  rect(c, x + W - 5, fy + 16, 1, 6, '#5b657b');                                            // puxador
+  rect(c, x, fy + H - 3, W, 3, '#2a303d'); rect(c, x, fy + H - 3, W, 1, '#4d5873');       // plinto
+}
+
+/** Extintor de parede + placa de sinalização (mesma lógica dos quadros: ocupa a face de 20px da parede). */
+function drawExtinguisher(c, tx, ty) {
+  const x = tx * TILE, y = ty * TILE - 20;
+  rect(c, x + 6, y + 4, 9, 9, 'rgba(0,0,0,0.30)');
+  rect(c, x + 4, y + 2, 9, 9, '#d63a34'); rect(c, x + 4, y + 2, 9, 1, '#f27a74'); rect(c, x + 4, y + 2, 1, 9, '#e5544e'); rect(c, x + 12, y + 2, 1, 9, '#8f1f1b');
+  rect(c, x + 7, y + 4, 3, 5, '#ffffff'); rect(c, x + 6, y + 4, 1, 1, '#ffffff'); rect(c, x + 10, y + 5, 2, 1, '#ffffff'); // pictograma
+  rect(c, x + 19, y + 5, 8, 15, 'rgba(0,0,0,0.30)');                                       // sombra do cilindro
+  rect(c, x + 17, y + 4, 8, 15, '#d63a34');
+  rect(c, x + 17, y + 4, 2, 15, '#f27a74'); rect(c, x + 24, y + 4, 1, 15, '#8f1f1b'); rect(c, x + 22, y + 4, 2, 15, '#b82b26');
+  rect(c, x + 17, y + 18, 8, 1, '#5a1210');
+  rect(c, x + 17, y + 10, 8, 4, '#f0f0f0'); rect(c, x + 19, y + 11, 4, 1, '#3a4150'); rect(c, x + 19, y + 13, 3, 1, '#3a4150');  // rótulo
+  rect(c, x + 19, y + 1, 4, 3, '#2a2f3b'); rect(c, x + 17, y + 1, 4, 1, '#c9ced8');        // válvula e alavanca
+  line(c, x + 22, y + 2, x + 26, y + 5, '#12151c'); line(c, x + 26, y + 5, x + 26, y + 11, '#12151c');   // mangueira
+  rect(c, x + 16, y + 7, 10, 1, '#20242f');                                                // cinta de fixação
+}
+
+/** Luminária de emergência de parede: corpo branco, dois faróis e LED indicador vermelho. */
+function drawEmergencyLight(c, tx, ty) {
+  const x = tx * TILE, y = ty * TILE - 20;
+  rect(c, x + 8, y + 6, 18, 9, 'rgba(0,0,0,0.30)');
+  rect(c, x + 6, y + 4, 18, 9, '#e8ecf5'); rect(c, x + 6, y + 4, 18, 1, '#ffffff'); rect(c, x + 6, y + 4, 1, 9, '#f4f7fb');
+  rect(c, x + 23, y + 4, 1, 9, '#9aa3b5'); rect(c, x + 6, y + 12, 18, 1, '#9aa3b5');
+  for (const hx of [x + 8, x + 17]) {
+    rect(c, hx, y + 1, 5, 4, '#2a2f3b'); rect(c, hx + 1, y + 1, 3, 2, '#fff2b0'); rect(c, hx + 1, y + 1, 2, 1, '#ffffff');
+  }
+  rect(c, x + 13, y + 8, 4, 3, '#20242f'); rect(c, x + 14, y + 9, 2, 1, '#ff5a52');
+  rect(c, x + 8, y + 9, 3, 1, '#c9d3e6');
+}
+
+/** Carrinho de manutenção (crash cart): estrutura metálica sobre rodízios, laptop aberto e rolo de cabo. */
+function drawCrashCart(c, tx, ty) {
+  const x = tx * TILE, y = ty * TILE;
+  box(c, x + 4, y + 12, 24, 16, 12, '#4f586d', { top: '#6b7690' });
+  const t = y + 12 - 12;
+  rect(c, x + 5, y + 20, 22, 2, '#2a303d');                                                // prateleira inferior
+  for (const cx of [x + 6, x + 23]) { rect(c, cx, y + 28, 3, 3, '#12151c'); rect(c, cx, y + 28, 1, 1, '#586178'); }  // rodízios
+  rect(c, x + 8, t + 3, 14, 9, 'rgba(0,0,0,0.22)');
+  rect(c, x + 6, t + 1, 14, 9, '#c6cdd8'); rect(c, x + 6, t + 1, 14, 1, '#e3e8ef'); rect(c, x + 19, t + 1, 1, 9, '#98a1b2');
+  rect(c, x + 7, t + 2, 12, 4, '#0b1410'); rect(c, x + 8, t + 3, 6, 1, '#5be08a'); rect(c, x + 8, t + 4, 4, 1, '#2f8f55');
+  rect(c, x + 7, t + 7, 12, 2, '#20242f');
+  disc(c, x + 24, t + 6, 4, 'rgba(0,0,0,0.22)'); disc(c, x + 23, t + 5, 4, '#1f5fbf'); disc(c, x + 23, t + 5, 2, '#3b82f6'); disc(c, x + 23, t + 5, 1, '#0f3a7a');
+  rect(c, x + 20, t + 9, 4, 1, '#3b82f6');
+}
+
+/** Tapete antiestático da área de operação: base escura pontilhada com borda tracejada amarelo/preto. */
+function drawOpsMat(c, tx, ty, w, h) {
+  const x = tx * TILE + 2, y = ty * TILE + 2, W = w * TILE - 4, H = h * TILE - 4;
+  rect(c, x, y, W, H, '#1b2433'); rect(c, x + 2, y + 2, W - 4, H - 4, '#222d40');
+  for (let j = 4; j < H - 4; j += 4) for (let i = 4; i < W - 4; i += 4) rect(c, x + i, y + j, 1, 1, ((i + j) & 4) ? '#2b3850' : '#1a2233');
+  for (let i = 0; i < W; i += 8) {
+    const a = Math.min(4, W - i), b = Math.min(4, W - i - 4);
+    rect(c, x + i, y, a, 2, '#d9ab3a'); rect(c, x + i, y + H - 2, a, 2, '#d9ab3a');
+    if (b > 0) { rect(c, x + i + 4, y, b, 2, '#20242f'); rect(c, x + i + 4, y + H - 2, b, 2, '#20242f'); }
+  }
+  for (let j = 0; j < H; j += 8) {
+    const a = Math.min(4, H - j), b = Math.min(4, H - j - 4);
+    rect(c, x, y + j, 2, a, '#d9ab3a'); rect(c, x + W - 2, y + j, 2, a, '#d9ab3a');
+    if (b > 0) { rect(c, x, y + j + 4, 2, b, '#20242f'); rect(c, x + W - 2, y + j + 4, 2, b, '#20242f'); }
+  }
+  rect(c, x + 2, y + H, W, 2, 'rgba(0,0,0,0.18)'); rect(c, x + W, y + 2, 2, H, 'rgba(0,0,0,0.14)');
+}
+
+/**
+ * Canaleta de cabos no piso (12px de largura, `len` px). Tampas de metal com parafusos e,
+ * em alguns trechos, aberta mostrando feixes coloridos e organizados.
+ */
+function drawTrunk(c, x, y, len, horiz, seed) {
+  const T = 12;
+  const at = (a, b, w, h, col) => (horiz ? rect(c, x + a, y + b, w, h, col) : rect(c, x + b, y + a, h, w, col));
+  at(2, 2, len, T, 'rgba(0,0,0,0.22)');
+  at(0, 0, len, T, '#20262f');
+  for (let s = 0; s * 32 < len; s++) {
+    const a0 = s * 32, sl = Math.min(32, len - a0);
+    if (hash(s, seed, 171) > 0.55) {
+      at(a0 + 1, 1, sl - 2, T - 2, '#0d1119');
+      for (let k = 0; k < 5; k++) {
+        const col = CABLE_COLS[Math.floor(hash(k, s + seed, 172) * CABLE_COLS.length)];
+        at(a0 + 1, 1 + k * 2, sl - 2, 1, col); at(a0 + 1, 2 + k * 2, sl - 2, 1, '#0d1119');
+      }
+    } else {
+      at(a0 + 1, 1, sl - 2, T - 2, '#48516a'); at(a0 + 1, 1, sl - 2, 1, '#7a86a3'); at(a0 + 1, T - 2, sl - 2, 1, '#2f3648');
+      at(a0 + 3, 5, 2, 2, '#2a3040'); at(a0 + 3, 5, 1, 1, '#8592ab'); at(a0 + sl - 5, 5, 2, 2, '#2a3040'); at(a0 + sl - 5, 5, 1, 1, '#8592ab');
+    }
+  }
+}
+
+/** Placa do piso técnico REMOVIDA: cova escura, pedestais, feixes de cabos subindo e a ventosa de içar placas. */
+function drawFloorPit(c, tx, ty) {
+  const x = tx * TILE, y = ty * TILE;
+  rect(c, x + 1, y + 1, 30, 30, '#080b12');
+  rect(c, x + 1, y + 1, 30, 6, '#1a2130');                                                 // parede interna (norte)
+  rect(c, x + 1, y + 1, 2, 30, '#232c40');
+  fade(c, x + 1, y + 7, 30, 8, 'down', 0.5);
+  for (const [px, py] of [[4, 12], [24, 12], [4, 24], [24, 24]]) { rect(c, x + px, y + py, 4, 4, '#586178'); rect(c, x + px, y + py, 4, 1, '#8a93a5'); rect(c, x + px + 3, y + py, 1, 4, '#2a2f3b'); }
+  const cols = ['#3b82f6', '#f2c14e', '#e5534b', '#3fbf7a'];
+  for (let k = 0; k < 4; k++) {
+    const bx = x + 8 + k * 5;
+    rect(c, bx, y + 8, 2, 16, cols[k]); rect(c, bx, y + 8, 1, 16, shade(cols[k], 0.3));
+    rect(c, bx + 2, y + 22 + (k % 2) * 3, 5, 2, cols[(k + 1) % 4]);
+  }
+  ell(c, x + 16, y + 26, 8, 3, '#141a28'); ell(c, x + 16, y + 26, 6, 2, '#3b82f6'); ell(c, x + 16, y + 26, 4, 1, '#0d1119');   // rolo de cabo
+  rect(c, x, y, 32, 1, '#6f7b93'); rect(c, x, y, 1, 32, '#606c84'); rect(c, x, y + 31, 32, 1, '#333b4e'); rect(c, x + 31, y, 1, 32, '#3a4358');
+  // ventosa (rebaixada no canto de baixo-direita da própria placa vizinha)
+  ell(c, x + 28, y + 27, 5, 3, 'rgba(0,0,0,0.30)'); ell(c, x + 27, y + 26, 4, 3, '#b3302b'); ell(c, x + 27, y + 25, 3, 1, '#e5544e'); rect(c, x + 25, y + 21, 5, 2, '#20242f');
+}
+
+// ---------------------------------------------------------------------------
 // Montagem das salas (posiciona móveis, bloqueios, assentos e luzes)
 // ---------------------------------------------------------------------------
 
@@ -1175,19 +1585,70 @@ function buildLounge(z) {
   placePlant(21, 17); placePlant(33, 17); placePlant(21, 32); placePlant(33, 32);
   addLight((z.x + z.w / 2) * TILE, (z.y + z.h / 2) * TILE, 230, LAMP, 0.6, 'lamp');
   addLight(28.5 * TILE, 17 * TILE + 50, 100, '#9cc4ff', 0.4, 'screen'); // TV
+  // cantinho do café (canto sul): bancada com cafeteira/micro-ondas/frutas/pia + geladeira.
+  // O comportamento "tomar café" (behaviors.js) cai no lounge quando não há copa.
+  placeDecor(29, 32, 4, 1, (c) => drawCounter(c, 29, 32, 4, [{ k: 'fruit', at: 0 }, { k: 'coffee', at: 1 }, { k: 'micro', at: 2 }, { k: 'sink', at: 3 }]));
+  placeDecor(22, 31, 1, 2, (c) => drawFridge(c, 22, 31));
+  addLight(30.5 * TILE, 32 * TILE + 2, 38, '#ffcf8a', 0.4, 'screen'); // luz da cafeteira
 }
 
-function buildKitchen(z) {
-  placeDecor(35, 17, 1, 2, (c) => drawFridge(c, 35, 17));
-  const items = [{ k: 'sink', at: 2 }, { k: 'coffee', at: 4 }, { k: 'micro', at: 6 }, { k: 'fruit', at: 7 }];
-  placeDecor(40, 17, 8, 1, (c) => drawCounter(c, 40, 17, 8, items));
-  placeDecor(40, 32, 5, 1, (c) => drawCounter(c, 40, 32, 5, [{ k: 'fruit', at: 1 }, { k: 'coffee', at: 3 }]));
-  placeDecor(40, 24, 4, 2, (c) => drawDiningTable(c, 40, 24, 4, 2));
-  placeChair(z.id, 40, 23, 'down', '#c46a3c'); placeChair(z.id, 42, 23, 'down', '#c46a3c');
-  placeChair(z.id, 41, 26, 'up', '#c46a3c'); placeChair(z.id, 43, 26, 'up', '#c46a3c');
-  placeChair(z.id, 39, 24, 'right', '#c46a3c'); placeChair(z.id, 44, 24, 'left', '#c46a3c');
-  placePlant(48, 17); placePlant(35, 32); placePlant(48, 32); placePlant(46, 28);
-  addLight((z.x + z.w / 2) * TILE, (z.y + z.h / 2) * TILE, 240, LAMP, 0.6, 'lamp');
+/**
+ * Sala de Servidores / NOC: videowall na parede norte, 2 mesas de operação (3 postos cada)
+ * viradas para ele, duas fileiras de racks com aleia fria no meio, canaletas de cabos,
+ * CRACs na parede sul, extintor, luz de emergência e carrinho de manutenção.
+ * Só os postos de operação têm assento; racks/CRAC/carrinho bloqueiam o tile.
+ */
+function buildServerRoom(z) {
+  // --- chão: tapete da área de operação e canaletas de cabos (sob os móveis)
+  rugOps.push((c) => drawOpsMat(c, 39, 19, 10, 3));
+  rugOps.push((c) => drawTrunk(c, 40 * TILE + 8, 22 * TILE + 10, 240, true, 3));          // alimenta as mesas
+  rugOps.push((c) => drawTrunk(c, 36 * TILE, 27 * TILE + 10, 12 * TILE, true, 5));        // aleia fria
+  rugOps.push((c) => drawTrunk(c, 39 * TILE + 10, 24 * TILE + 16, 208, false, 8));        // vão entre grupos de racks
+  rugOps.push((c) => drawTrunk(c, 44 * TILE + 10, 22 * TILE + 10, 278, false, 11));       // tronco principal
+  // --- parede norte: videowall, luz de emergência e extintor (itens de parede: key baixa)
+  blockRect(40, 17, 9, 1);
+  pushFurn(0, (c) => drawVideoWall(c, 40, 17, 9));
+  pushFurn(0, (c) => drawEmergencyLight(c, 35, 17));
+  pushFurn(0, (c) => drawExtinguisher(c, 36, 17));
+  addLight(36 * TILE - 16, 17 * TILE - 8, 34, '#ff5a5a', 0.55, 'screen');                 // LED vermelho da emergência
+  addLight(42 * TILE, 17 * TILE + 8, 110, '#7fb4ff', 0.5, 'screen');
+  addLight(44.5 * TILE, 17 * TILE + 8, 120, '#6be0ff', 0.55, 'screen');
+  addLight(47 * TILE, 17 * TILE + 8, 110, '#7fffc0', 0.45, 'screen');
+  // --- mesas de operação: 2 x 3 postos, de frente para o videowall
+  const seatCols = ['#26314a', '#1f3d4d'];
+  let n = 0;
+  for (const dx of [40, 45]) {
+    blockRect(dx, 20, 3, 1);
+    pushFurn(21 * TILE, (c) => drawOpsDesk(c, dx, 20, 3, dx * 3));
+    for (let i = 0; i < 3; i++) {
+      placeChair(z.id, dx + i, 21, 'up', seatCols[n++ % 2]);
+      addLight((dx + i + 0.5) * TILE, 20 * TILE, 44, SCREEN, 0.5, 'screen');
+    }
+  }
+  // --- racks: 2 fileiras (A y=25, B y=29) em 3 grupos, com passagens em x=39 e x=44
+  const xs = [36, 37, 38, 40, 41, 42, 43, 45, 46, 47];
+  const rows = [
+    [25, 'A', '#3b82f6', ['srv', 'srv', 'net', 'srv', 'stor', 'srv', 'ups', 'net', 'srv', 'stor']],
+    [29, 'B', '#ff9a3c', ['net', 'srv', 'srv', 'stor', 'srv', 'srv', 'net', 'srv', 'ups', 'srv']],
+  ];
+  for (const [ry, name, tagCol, types] of rows) {
+    xs.forEach((tx, i) => {
+      const tag = name + String(i + 1).padStart(2, '0');
+      blockRect(tx, ry, 1, 1);
+      pushFurn((ry + 1) * TILE, (c) => drawRack(c, tx, ry, types[i], tag, i + (name === 'B' ? 20 : 0), tagCol));
+      for (const p of rackLightSpots(tx, ry, types[i])) addLight(p.x, p.y, 15, p.col, 0.8, 'screen');   // LEDs (cintilam sozinhos)
+    });
+  }
+  // --- aleia fria: placa do piso removida, com cabos subindo
+  blockRect(41, 28, 1, 1);
+  pushFurn(29 * TILE, (c) => drawFloorPit(c, 41, 28));
+  // --- ar-condicionado de precisão na parede sul e carrinho de manutenção
+  for (const cx of [36, 46]) {
+    placeDecor(cx, 32, 2, 1, (c) => drawCRAC(c, cx, 32, 2));
+    addLight((cx + 1.2) * TILE, 32 * TILE + 8, 26, '#5fe0ff', 0.45, 'screen');              // LCD do CRAC
+  }
+  placeDecor(48, 23, 1, 1, (c) => drawCrashCart(c, 48, 23));
+  addLight((z.x + z.w / 2) * TILE, (z.y + z.h / 2) * TILE, 260, '#cfe4ff', 0.4, 'lamp');   // luz fria de teto
 }
 
 function buildCorridor() {
@@ -1204,7 +1665,7 @@ buildTeamRoom(zones[1], 1);
 buildTeamRoom(zones[2], 2);
 buildBoardroom(zones[3]);
 buildLounge(zones[4]);
-buildKitchen(zones[5]);
+buildServerRoom(zones[5]);
 buildCorridor();
 furnOps.sort((a, b) => a.k - b.k); // sort estável: empates mantêm a ordem de inserção
 
@@ -1302,7 +1763,7 @@ function buildCaches() {
       if (wallGrid[i]) { drawWallTile(g, tx, ty); continue; }
       const zi = zoneGrid[i];
       if (zi < 0) drawWoodTile(g, tx, ty);
-      else if (zones[zi].kind === 'kitchen') drawCheckerTile(g, tx, ty);
+      else if (zones[zi].kind === 'server') drawRaisedFloorTile(g, tx, ty);
       else drawCarpetTile(g, tx, ty, shade(zones[zi].color, -0.55));
     }
   }
