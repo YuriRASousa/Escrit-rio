@@ -1,14 +1,15 @@
 name: Release
 
 # Publica o executável quando uma tag v* é empurrada.
-# Também dá para disparar à mão pela aba Actions (workflow_dispatch).
+# Também dá para disparar à mão pela aba Actions (workflow_dispatch) — útil
+# quando quem dispara não consegue empurrar tags.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
 
 permissions:
-  contents: write        # necessário para o electron-builder criar a release
+  contents: write        # criar a release e a tag
 
 jobs:
   windows:
@@ -26,13 +27,33 @@ jobs:
       - name: Testes
         run: npm test
 
-      - name: Empacotar e publicar
+      - name: Ler a versao
+        id: ver
+        shell: bash
+        run: echo "v=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # O electron-builder cria a release como RASCUNHO, de propósito: o GitHub
+      # recusa publicar uma release cuja tag ainda não existe, e aqui a tag só
+      # nasce no passo seguinte.
+      - name: Empacotar e subir os arquivos
         run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Tirar do rascunho cria a tag apontando para este commit.
+      - name: Publicar a release
+        shell: bash
+        run: |
+          gh release edit "v${{ steps.ver.outputs.v }}" \
+            --draft=false \
+            --target "${{ github.sha }}" \
+            --title "Escritorio dos Agentes v${{ steps.ver.outputs.v }}" \
+            --notes-file docs/RELEASE_NOTES.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # Sobe também como artefato do run, para dar para baixar mesmo se a
-      # publicação da release falhar por permissão.
+      # publicação da release falhar.
       - uses: actions/upload-artifact@v4
         if: always()
         with:

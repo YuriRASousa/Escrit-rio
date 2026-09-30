@@ -87,7 +87,7 @@
         "provider": "github",
         "owner": "YuriRASousa",
         "repo": "Escrit-rio",
-        "releaseType": "release"
+        "releaseType": "draft"
       }
     ]
   }
