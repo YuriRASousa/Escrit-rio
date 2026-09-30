@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+
+      # Sintaxe de todos os módulos. Barato e pega arquivo salvo pela metade,
+      # que já congelou a tela do usuário uma vez.
+      - name: Sintaxe
+        run: |
+          for f in public/js/*.js server/*.js scripts/*.js test/*.mjs; do
+            node --check "$f" || exit 1
+          done
+          echo "sintaxe ok em todos os módulos"
+
+      # Invariantes do mapa, validação do ingest, contraste dos sprites e
+      # medição das poses.
+      - name: Testes
+        run: npm test
+
+      # O servidor precisa subir e responder de verdade.
+      - name: Fumaça do servidor
+        run: |
+          PORT=4399 node server/index.js &
+          SERVIDOR=$!
+          for i in $(seq 1 20); do
+            curl -sf http://127.0.0.1:4399/api/health >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:4399/api/health || { kill $SERVIDOR; exit 1; }
+          curl -sf -X POST http://127.0.0.1:4399/api/event \
+            -H 'content-type: application/json' \
+            -d '{"agent":{"id":"ci","name":"CI"},"message":"ping"}' >/dev/null || { kill $SERVIDOR; exit 1; }
+          curl -sf http://127.0.0.1:4399/api/state | grep -q '"ci"' || { kill $SERVIDOR; exit 1; }
+          kill $SERVIDOR
+          echo "servidor sobe, aceita evento e devolve no estado"

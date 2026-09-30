@@ -106,6 +106,40 @@
     <div id="feed"></div>
   </aside>
 </div>
+<!-- Captura de erro ANTES do módulo: uma falha ao carregar ou avaliar main.js
+     acontece antes de qualquer código dele rodar, então o handler tem que já
+     estar instalado aqui. Sem isso a página fica preta e sem pista nenhuma. -->
+<script>
+(function () {
+  var mostrado = false;
+  function mostrar(titulo, detalhe) {
+    if (mostrado) return;           // só a primeira falha; as seguintes costumam ser consequência
+    mostrado = true;
+    var d = document.createElement('div');
+    d.setAttribute('role', 'alert');
+    d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#7f1d1d;' +
+      'color:#fee;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;padding:10px 14px;' +
+      'border-bottom:1px solid #f87171;box-shadow:0 2px 12px rgba(0,0,0,.5)';
+    d.innerHTML = '<b>' + titulo + '</b><br><span style="opacity:.9"></span>' +
+      '<div style="margin-top:6px;opacity:.75">Se você acabou de atualizar o projeto, ' +
+      'recarregue com <b>Ctrl+Shift+R</b>: o F5 comum continua servindo a versão antiga do cache.</div>';
+    d.querySelector('span').textContent = detalhe;
+    (document.body || document.documentElement).appendChild(d);
+  }
+  addEventListener('error', function (e) {
+    if (e.target && e.target !== window && e.target.src) {
+      mostrar('Falha ao carregar um arquivo do app', String(e.target.src));
+    } else {
+      mostrar('Erro de JavaScript — o escritório parou',
+              (e.message || 'erro desconhecido') + (e.filename ? '  (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : ''));
+    }
+  }, true);
+  addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    mostrar('Promessa rejeitada sem tratamento', (r && (r.stack || r.message)) || String(r));
+  });
+})();
+</script>
 <script type="module" src="./js/main.js"></script>
 </body>
 </html>

@@ -348,6 +348,24 @@ let bubbleRectCount = 0;
 const GEO_W = [0, 0, 0];
 const GEO_H = [0, 0, 0];
 
+// --- Nametag: visibilidade por contexto e anti-sobreposição ------------------
+// Abaixo deste zoom o nametag some (fica só a bolinha de status), salvo
+// selecionado / hover / balão ativo. draw(ctx) sem view assume zoom 1 e mostra tudo.
+export const NAMETAG_ZOOM_MIN = 0.6;
+const TAG_FADE = 0.15;        // s — fade entre pílula e bolinha
+const TAG_MAX_SCAN = 64;      // teto de comparações por personagem
+const TAG_GAP = 2;            // px entre pílulas ao empurrar
+const TAG_SHIFT_MAX = 60;     // px — deslocamento máximo
+const TAG_SHIFT_RATE = 14;    // 1/s — suavização do deslocamento
+const DOT_R = 3;
+
+// Retângulos de nametag visíveis: frame anterior (prev) e corrente (cur).
+// Objetos reaproveitados, sem alocação por frame. O desenho é y-sort (atrás
+// primeiro), então quem está atrás só conhece a pílula dos da frente pelo frame
+// anterior — 1 frame de defasagem, imperceptível e estável.
+let tagPrev = [], tagCur = [];
+let tagPrevN = 0, tagCurN = 0, tagFrame = 1;
+
 // ---------------------------------------------------------------------------
 // Character
 // ---------------------------------------------------------------------------
@@ -887,7 +905,7 @@ export class Character {
     return this._lightVal;
   }
 
-  draw(ctx) {
+  draw(ctx, view) {
     const a = this.agent;
     const fx = Math.round(this.worldX);
     const fy = Math.round(this.worldY);
@@ -964,10 +982,100 @@ export class Character {
 
     // nametag e ícone (sem alpha reduzido pela sombra)
     const headTop = fy + sit - 44;
-    const tagY = this._drawNametag(ctx, fx, headTop - 9, a, color);
+    const tagY = this._nametagLayer(ctx, fx, headTop, a, color, view, alpha);
     this._iconTop = tagY;
     this._drawStatusIcon(ctx, fx, tagY - 11, a.status, color);
     ctx.restore();
+  }
+
+  // Decide visibilidade (com fade), resolve sobreposição e desenha pílula ou
+  // bolinha. Retorna o topo do elemento desenhado (âncora do ícone e do balão).
+  _nametagLayer(ctx, fx, headTop, agent, color, view, alpha) {
+    const id = agent.id;
+    const want = !view
+      || (view.zoom == null ? 1 : view.zoom) >= NAMETAG_ZOOM_MIN
+      || (view.selectedId != null && view.selectedId === id)
+      || (view.hoveredId != null && view.hoveredId === id)
+      || this.bubbles.length > 0;
+    const now = nowSec();
+    const dt = this._tagT === undefined ? 0 : Math.min(0.25, Math.max(0, now - this._tagT));
+    this._tagT = now;
+    let vis = this._tagVis;
+    if (vis === undefined) vis = want ? 1 : 0;       // sem fade no primeiro frame
+    else vis = Math.max(0, Math.min(1, vis + (want ? dt : -dt) / TAG_FADE));
+    this._tagVis = vis;
+
+    const baseCy = headTop - 9;
+    const dotTop = headTop - 6 - DOT_R;
+    let topY = dotTop;
+
+    if (vis > 0.01) {
+      // nova frame? (este personagem já desenhou neste frame => troca os buffers)
+      if (this._tagFrame === tagFrame) {
+        const t = tagPrev; tagPrev = tagCur; tagCur = t;
+        tagPrevN = tagCurN; tagCurN = 0; tagFrame++;
+      }
+      this._tagFrame = tagFrame;
+
+      ctx.font = NAME_FONT;
+      const name = fitText(ctx, agent.name || id, 130);
+      const w = Math.ceil(ctx.measureText(name).width + 16 + 7);
+      const h = 16;
+      const x = Math.round(fx - w / 2);
+      // alvo do deslocamento: sobe até sair de quem está NA FRENTE (maior y)
+      let shift = 0;
+      const n = Math.min(tagPrevN, TAG_MAX_SCAN);
+      for (let pass = 0; pass < 3; pass++) {
+        let hit = false;
+        const y0 = Math.round(baseCy - h / 2) - shift;
+        for (let i = 0; i < n; i++) {
+          const r = tagPrev[i];
+          if (r.ch === this) continue;
+          const front = r.wy > this.worldY || (r.wy === this.worldY && r.ch.agent.id > id);
+          if (!front) continue;
+          if (x < r.x + r.w && x + w > r.x && y0 < r.y + r.h && y0 + h > r.y) {
+            shift = Math.min(TAG_SHIFT_MAX, shift + (y0 + h - r.y) + TAG_GAP);
+            hit = true;
+          }
+        }
+        if (!hit) break;
+      }
+      const cur = this._tagShift || 0;
+      const k = dt > 0 ? 1 - Math.exp(-TAG_SHIFT_RATE * dt) : 1;
+      this._tagShift = cur + (shift - cur) * k;
+      const sh = Math.round(this._tagShift);
+
+      ctx.globalAlpha = alpha * vis;
+      topY = this._drawNametag(ctx, fx, baseCy - sh, agent, color);
+      ctx.globalAlpha = alpha;
+
+      if (vis > 0.5) {
+        const r = tagCur[tagCurN] || (tagCur[tagCurN] = { ch: null, x: 0, y: 0, w: 0, h: 0, wy: 0 });
+        tagCurN++;
+        r.ch = this; r.x = x; r.y = topY; r.w = w; r.h = h; r.wy = this.worldY;
+      }
+    } else {
+      this._tagShift = 0;
+    }
+
+    if (vis < 0.99) {
+      // bolinha de status sobre a cabeça, some conforme a pílula aparece
+      ctx.globalAlpha = alpha * (1 - vis);
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(fx, headTop - 6, DOT_R, 0, TWO_PI); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.globalAlpha = alpha;
+      topY = vis > 0.01 ? topY + (dotTop - topY) * (1 - vis) : dotTop;
+    }
+    return topY;
+  }
+
+  // Caixa do sprite (com folga) para hover/clique no mapa. Coordenadas de mundo.
+  hitTest(worldX, worldY) {
+    const fx = this.worldX, fy = this.worldY + (this.sitY || 0);
+    const pad = 3;
+    return worldX >= fx - 15 - pad && worldX <= fx + 15 + pad
+      && worldY >= fy - 44 - pad && worldY <= fy + 4 + pad;
   }
 
   // Pílula escura com bolinha de status + nome. Retorna o topo da pílula.

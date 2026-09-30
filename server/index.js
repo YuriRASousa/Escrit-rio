@@ -16,6 +16,9 @@ const MAX_BUFFERED = 2 * 1024 * 1024;
 
 export async function startServer(opts = {}) {
   const port = Number(opts.port ?? process.env.PORT ?? 4317);
+  // HOST=0.0.0.0 (ou qualquer outro) libera o acesso pela rede, de propósito.
+  const HOST = opts.host ?? process.env.HOST ?? '127.0.0.1';
+  const LOCAL_ONLY = HOST === '127.0.0.1' || HOST === 'localhost' || HOST === '::1';
   const watchDir = opts.dir ?? process.env.CLAUDE_PROJECTS_DIR ?? path.join(os.homedir(), '.claude', 'projects');
   const quiet = opts.quiet ?? false;
   const log = (...a) => { if (!quiet) console.log(...a); };
@@ -123,9 +126,13 @@ export async function startServer(opts = {}) {
   await ready;
   attach();
 
+  // Escuta só no loopback por padrão. Sem isso o Node escuta em 0.0.0.0, e como
+  // este app serve o conteúdo das sessões do Claude Code (comandos de shell,
+  // caminhos de arquivo, cwd, trechos de prompt) sem nenhuma autenticação,
+  // qualquer pessoa na mesma rede Wi-Fi conseguiria ler tudo. Expor é opt-in.
   await new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(port, resolve);
+    server.listen(port, HOST, resolve);
   });
 
   log('');
@@ -133,6 +140,12 @@ export async function startServer(opts = {}) {
   log(`  Abra:        http://localhost:${port}`);
   log(`  Observando:  ${watching.length ? watchDir : '(nada — modo demo)'}`);
   log(`  Agentes:     ${world.agents.size} carregados do histórico recente`);
+  if (!LOCAL_ONLY) {
+    log('');
+    log(`  [ATENÇÃO] Escutando em ${HOST}, ou seja, visível para a rede local.`);
+    log('            Este app serve comandos, caminhos e prompts das suas sessões,');
+    log('            e não tem senha. Só use assim em rede de confiança.');
+  }
   log('');
 
   const close = async () => {

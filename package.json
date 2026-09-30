@@ -7,12 +7,15 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "demo": "node scripts/demo.js"
+    "demo": "node scripts/demo.js",
+    "test": "node test/run.mjs && node .claude/skills/sprite-sheet/scripts/measure.mjs"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
     "express": "^5.1.0",
     "ws": "^8.18.3"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }
