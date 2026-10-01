@@ -236,6 +236,51 @@ primeiro livre, e com ele todos os agentes se amontoavam no mesmo canto da sala.
 **Desempenho medido:** 60fps com 50 agentes, já com os props animados. Com 150
 agentes cai para ~37fps.
 
+## 7d. Rodada do canal da nuvem — app de desktop e release
+
+**O app.** `app/main.cjs` sobe o servidor dentro do processo do Electron e mostra
+a mesma página numa janela. CommonJS de propósito (o projeto é ESM, então o
+servidor entra por `import()` dinâmico). O visual não muda em nada.
+
+- A porta é testada ANTES de subir: um `listen` que falha deixa para trás o
+  watcher de arquivos que o `startServer` já ligou, então tentar-e-repetir
+  acumularia watchers. Se a 4317 estiver ocupada, usa porta livre.
+- `Ctrl+D` liga o modo demonstração dentro do app. `scripts/demo.js` virou módulo
+  com `startDemo()`, mantendo o uso por linha de comando. Sem isso o app
+  empacotado não teria como encher o escritório.
+- Trava de instância única: abrir de novo traz a janela existente para a frente.
+
+**ARMADILHA DE RELEASE — custou 4 tentativas.** O publisher do `electron-builder`
+(`--publish always`) subia APENAS o `.blockmap` de 117KB e deixava os `.exe` de
+fora, **sem falhar o passo**. O workflow reportava sucesso com a release vazia, e
+isso só apareceu porque alguém foi conferir os arquivos da release na mão.
+
+Duas hipóteses erradas antes de achar: (1) faltava a tag — era verdade só na
+primeira tentativa, resolvida com rascunho; (2) uma release já publicada estaria
+bloqueando o upload — refutada, porque a terceira tentativa criou do zero e
+falhou igual.
+
+Como está agora, em `.github/workflows/release.yml`:
+1. `electron-builder --win --publish never` só empacota;
+2. um passo confere que algum `.exe` saiu, e falha se não saiu;
+3. `gh release delete --cleanup-tag` limpa a versão sendo reconstruída;
+4. `gh release create "vX" release/*.exe --target <sha>` cria tag, release e
+   anexa os instaladores num comando só;
+5. um passo confere que a release publicada TEM `.exe` anexado, e falha se não
+   tiver.
+
+**Regra que vale guardar: status verde de CI não é prova de entrega.** Os passos
+4 e 5 existem porque o workflow mentia. Qualquer automação que produz artefato
+precisa de um passo que verifique o artefato, não só o comando.
+
+Disparo: tag `v*` ou `workflow_dispatch` pela aba Actions. O push de tag é
+bloqueado em alguns ambientes; nesses casos use o disparo manual, que funciona
+porque o `gh` cria a tag.
+
+**Referência:** o projeto Discordia (Sasaquee/discordia) faz build local com
+`npm run dist` e publica à mão, sem Actions. De lá vieram o `win.icon` explícito
+e o padrão de nome com "Setup".
+
 ## 8. Pendências conhecidas
 
 - **Cabeças de personagens carecas** ficam parecidas entre si: o estilo `bald`
